@@ -19,11 +19,52 @@ CREATE TABLE users (
 
     photo VARCHAR(255) DEFAULT 'default.png',
 
-    role ENUM('admin','user') DEFAULT 'user',
+    role ENUM(
+        'admin',
+        'user'
+    ) DEFAULT 'user',
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 
 );
+
+-- =========================================
+-- TABLE WORK SCHEDULE
+-- =========================================
+CREATE TABLE work_schedule (
+
+    id INT AUTO_INCREMENT PRIMARY KEY,
+
+    day_name ENUM(
+        'Monday',
+        'Tuesday',
+        'Wednesday',
+        'Thursday',
+        'Friday',
+        'Saturday'
+    ) NOT NULL,
+
+    start_time TIME NOT NULL,
+
+    end_time TIME NOT NULL
+
+);
+
+-- =========================================
+-- DEFAULT WORK SCHEDULE
+-- =========================================
+INSERT INTO work_schedule (
+    day_name,
+    start_time,
+    end_time
+)
+VALUES
+('Monday','08:00:00','17:00:00'),
+('Tuesday','08:00:00','17:00:00'),
+('Wednesday','08:00:00','17:00:00'),
+('Thursday','08:00:00','17:00:00'),
+('Friday','08:00:00','17:00:00'),
+('Saturday','08:00:00','12:00:00');
 
 -- =========================================
 -- TABLE ATTENDANCE
@@ -52,22 +93,69 @@ CREATE TABLE attendance (
         'Hadir',
         'Terlambat',
         'Izin',
-        'Sakit'
-    ) DEFAULT 'Hadir',
+        'Sakit',
+        'Tidak Hadir'
+    ) NOT NULL,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-    INDEX idx_user_id (user_id),
 
     UNIQUE KEY unique_attendance (
         user_id,
         attendance_date
     ),
 
+    INDEX idx_user_id (user_id),
+
     CONSTRAINT fk_attendance_user
     FOREIGN KEY (user_id)
     REFERENCES users(id)
     ON DELETE CASCADE
+
+);
+
+-- =========================================
+-- TABLE LEAVE REQUESTS
+-- =========================================
+CREATE TABLE leave_requests (
+
+    id INT AUTO_INCREMENT PRIMARY KEY,
+
+    user_id INT NOT NULL,
+
+    leave_date DATE NOT NULL,
+
+    type ENUM(
+        'Izin',
+        'Sakit'
+    ) NOT NULL,
+
+    reason TEXT NOT NULL,
+
+    attachment VARCHAR(255) DEFAULT NULL,
+
+    approval_status ENUM(
+        'Pending',
+        'Approved',
+        'Rejected'
+    ) DEFAULT 'Pending',
+
+    approved_by INT DEFAULT NULL,
+
+    approved_at DATETIME DEFAULT NULL,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    INDEX idx_leave_user (user_id),
+
+    CONSTRAINT fk_leave_user
+    FOREIGN KEY (user_id)
+    REFERENCES users(id)
+    ON DELETE CASCADE,
+
+    CONSTRAINT fk_leave_admin
+    FOREIGN KEY (approved_by)
+    REFERENCES users(id)
+    ON DELETE SET NULL
 
 );
 
@@ -81,7 +169,8 @@ INSERT INTO users (
     password,
     role
 
-) VALUES (
+)
+VALUES (
 
     'Administrator',
     'admin@gmail.com',
@@ -91,7 +180,7 @@ INSERT INTO users (
 );
 
 -- =========================================
--- DEMO USER
+-- DEFAULT USER
 -- =========================================
 INSERT INTO users (
 
@@ -100,7 +189,8 @@ INSERT INTO users (
     password,
     role
 
-) VALUES (
+)
+VALUES (
 
     'User Demo',
     'user@gmail.com',
