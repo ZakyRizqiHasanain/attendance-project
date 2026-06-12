@@ -1,10 +1,4 @@
-/admin
 /architecture_diagram.md
 /architecture_diagram.puml
-/assets
-/auth
 /class_diagram.puml
-/config
-/database
-/index.php
 /usecase_diagram.puml

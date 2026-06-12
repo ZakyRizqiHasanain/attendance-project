@@ -1,4 +1,10 @@
 -- =========================================
+-- CREATE DATABASE
+-- =========================================
+CREATE DATABASE IF NOT EXISTS attendance_system;
+USE attendance_system;
+
+-- =========================================
 -- TABLE USERS
 -- =========================================
 CREATE TABLE users (
@@ -9,9 +15,9 @@ CREATE TABLE users (
 
     email VARCHAR(100) NOT NULL UNIQUE,
 
-    password VARCHAR(255) NOT NULL,
+    password VARCHAR(100) NOT NULL,
 
-    photo VARCHAR(255) NULL,
+    photo VARCHAR(255) DEFAULT 'default.png',
 
     role ENUM('admin','user') DEFAULT 'user',
 
@@ -28,22 +34,37 @@ CREATE TABLE attendance (
 
     user_id INT NOT NULL,
 
-    check_in DATETIME NULL,
+    attendance_date DATE NOT NULL,
 
-    check_out DATETIME NULL,
+    check_in TIME DEFAULT NULL,
 
-    selfie VARCHAR(255) NULL,
+    check_out TIME DEFAULT NULL,
 
-    selfie_checkout VARCHAR(255) NULL,
+    selfie VARCHAR(255) DEFAULT NULL,
 
-    latitude VARCHAR(50) NULL,
+    selfie_checkout VARCHAR(255) DEFAULT NULL,
 
-    longitude VARCHAR(50) NULL,
+    latitude DECIMAL(10,8) DEFAULT NULL,
 
-    status VARCHAR(50) NULL,
+    longitude DECIMAL(11,8) DEFAULT NULL,
+
+    status ENUM(
+        'Hadir',
+        'Terlambat',
+        'Izin',
+        'Sakit'
+    ) DEFAULT 'Hadir',
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
+    INDEX idx_user_id (user_id),
+
+    UNIQUE KEY unique_attendance (
+        user_id,
+        attendance_date
+    ),
+
+    CONSTRAINT fk_attendance_user
     FOREIGN KEY (user_id)
     REFERENCES users(id)
     ON DELETE CASCADE
@@ -51,7 +72,7 @@ CREATE TABLE attendance (
 );
 
 -- =========================================
--- DEFAULT ADMIN ACCOUNT
+-- DEFAULT ADMIN
 -- =========================================
 INSERT INTO users (
 
@@ -60,22 +81,17 @@ INSERT INTO users (
     password,
     role
 
-)
-
-VALUES (
+) VALUES (
 
     'Administrator',
-
     'admin@gmail.com',
-
-    'password',
-
+    'admin123',
     'admin'
 
 );
 
 -- =========================================
--- OPTIONAL SAMPLE USER
+-- DEMO USER
 -- =========================================
 INSERT INTO users (
 
@@ -84,16 +100,11 @@ INSERT INTO users (
     password,
     role
 
-)
-
-VALUES (
+) VALUES (
 
     'User Demo',
-
     'user@gmail.com',
-
-    'password',
-
+    'user123',
     'user'
 
 );
