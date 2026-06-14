@@ -176,5 +176,5 @@ navigator.geolocation.getCurrentPosition(function(position) {
 
 </script>
 
-</body>
+</body> 
 </html>
