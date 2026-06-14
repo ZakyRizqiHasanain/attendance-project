@@ -30,7 +30,6 @@ $admin_photo = !empty($admin['photo']) ? $admin['photo'] : 'default.png';
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <link href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css" rel="stylesheet">
-<<<<<<< HEAD
     <link rel="stylesheet" href="../assets/style.css">
 </head>
 <body class="dashboard">
@@ -41,28 +40,6 @@ $admin_photo = !empty($admin['photo']) ? $admin['photo'] : 'default.png';
             <i class="bi bi-fingerprint text-primary fs-3"></i>
             <span>Attendance System</span>
         </a>
-=======
-    <style>
-        * { user-select: text; -webkit-user-select: text; }
-        body { background-color: #f4f6f9; font-family: 'Segoe UI', 'Roboto', sans-serif; }
-        .navbar-dark.bg-dark { background-color: #1e2a3a !important; }
-        .navbar-brand, .navbar-brand i { color: white !important; }
-        .btn-outline-light { color: white; border-color: white; }
-        .btn-outline-light:hover { background-color: rgba(255,255,255,0.1); }
-        .card-stats { border: none; border-radius: 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); background: white; }
-        .icon-bg { width: 50px; height: 50px; border-radius: 14px; background-color: #eef2f5; color: #2c3e50; display: flex; align-items: center; justify-content: center; font-size: 24px; }
-        .table-container { background: white; border-radius: 24px; padding: 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); }
-        .page-title { font-weight: 700; color: #1e2a3a; }
-        .btn-excel { background-color: #2c6e2f; color: white; border-radius: 40px; padding: 8px 25px; border: none; }
-        .btn-excel:hover { background-color: #1f5422; }
-    </style>
-</head>
-<body>
-
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-    <div class="container-fluid px-4">
-        <a class="navbar-brand fw-bold" href="dashboard.php"><i class="bi bi-fingerprint fs-3 me-2"></i> Attendance System</a>
->>>>>>> 2a72f8ff5e33512f46cc6d52663c013b2c3068c0
         <div class="d-flex align-items-center">
             <div class="dropdown">
                 <a href="#" class="d-flex align-items-center text-decoration-none dropdown-toggle text-white" data-bs-toggle="dropdown">
