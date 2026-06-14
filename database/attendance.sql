@@ -15,7 +15,7 @@ CREATE TABLE users (
 
     email VARCHAR(100) NOT NULL UNIQUE,
 
-    password VARCHAR(100) NOT NULL,
+    password VARCHAR(255) NOT NULL,  -- FIX: diperbesar untuk hash password
 
     photo VARCHAR(255) DEFAULT 'default.png',
 
@@ -24,8 +24,9 @@ CREATE TABLE users (
         'user'
     ) DEFAULT 'user',
 
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP  -- ADD (opsional tapi bagus)
 );
 
 -- =========================================
@@ -42,12 +43,11 @@ CREATE TABLE work_schedule (
         'Thursday',
         'Friday',
         'Saturday'
-    ) NOT NULL,
+    ) NOT NULL UNIQUE,   -- FIX: cegah duplikat hari
 
     start_time TIME NOT NULL,
 
     end_time TIME NOT NULL
-
 );
 
 -- =========================================
@@ -77,17 +77,16 @@ CREATE TABLE attendance (
 
     attendance_date DATE NOT NULL,
 
-    check_in TIME DEFAULT NULL,
+    check_in DATETIME NULL,
+    check_out DATETIME NULL,
 
-    check_out TIME DEFAULT NULL,
+    selfie VARCHAR(255) NULL,
 
-    selfie VARCHAR(255) DEFAULT NULL,
+    selfie_checkout VARCHAR(255) NULL,
 
-    selfie_checkout VARCHAR(255) DEFAULT NULL,
+    latitude DECIMAL(10,8) NULL,
 
-    latitude DECIMAL(10,8) DEFAULT NULL,
-
-    longitude DECIMAL(11,8) DEFAULT NULL,
+    longitude DECIMAL(11,8) NULL,
 
     status ENUM(
         'Hadir',
@@ -95,16 +94,21 @@ CREATE TABLE attendance (
         'Izin',
         'Sakit',
         'Tidak Hadir'
-    ) NOT NULL,
+    ) NOT NULL DEFAULT 'Tidak Hadir',  -- FIX: lebih realistis
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, -- ADD
 
     UNIQUE KEY unique_attendance (
         user_id,
         attendance_date
     ),
 
-    INDEX idx_user_id (user_id),
+    INDEX idx_leave_user (user_id),
+    INDEX idx_attendance_date (attendance_date),
+    INDEX idx_user_date (user_id, attendance_date),
+    INDEX idx_status (status),
 
     CONSTRAINT fk_attendance_user
     FOREIGN KEY (user_id)
@@ -145,8 +149,12 @@ CREATE TABLE leave_requests (
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
-    INDEX idx_leave_user (user_id),
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, -- ADD
 
+    INDEX idx_leave_user (user_id),
+    INDEX idx_leave_date (leave_date),
+    INDEX idx_leave_status (approval_status),
+    
     CONSTRAINT fk_leave_user
     FOREIGN KEY (user_id)
     REFERENCES users(id)
@@ -160,41 +168,33 @@ CREATE TABLE leave_requests (
 );
 
 -- =========================================
--- DEFAULT ADMIN
+-- DEFAULT ADMIN (WARNING: DEMO ONLY)
 -- =========================================
 INSERT INTO users (
-
     name,
     email,
     password,
     role
-
 )
 VALUES (
-
     'Administrator',
     'admin@gmail.com',
-    'admin123',
+    'password', 
     'admin'
-
 );
 
 -- =========================================
--- DEFAULT USER
+-- DEFAULT USER (WARNING: DEMO ONLY)
 -- =========================================
 INSERT INTO users (
-
     name,
     email,
     password,
     role
-
 )
 VALUES (
-
     'User Demo',
     'user@gmail.com',
-    'user123',
+    'user123', 
     'user'
-
 );

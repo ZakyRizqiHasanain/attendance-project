@@ -9,131 +9,67 @@ if(!isset($_SESSION['user_id'])){
 
 $user_id = $_SESSION['user_id'];
 
-$user = mysqli_fetch_assoc(
-    mysqli_query($conn,
-    "SELECT * FROM users WHERE id='$user_id'")
-);
+/* =========================
+   GET USER DATA
+========================= */
+$user_query = mysqli_query($conn, "SELECT * FROM users WHERE id='$user_id'");
+$user = mysqli_fetch_assoc($user_query);
 
-/*
-|--------------------------------------------------------------------------
-| UPDATE PROFILE
-|--------------------------------------------------------------------------
-*/
+$user_photo = !empty($user['photo']) ? $user['photo'] : 'default.png';
 
+/* =========================
+   UPDATE PROFILE
+========================= */
 if(isset($_POST['update_profile'])){
 
-    $name = mysqli_real_escape_string(
-        $conn,
-        $_POST['name']
-    );
-
+    $name = mysqli_real_escape_string($conn, $_POST['name']);
     $photo = $user['photo'];
 
     if(!empty($_FILES['photo']['name'])){
 
         $file = $_FILES['photo'];
-
-        $ext = strtolower(
-            pathinfo(
-                $file['name'],
-                PATHINFO_EXTENSION
-            )
-        );
+        $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
 
         $allowed = ['jpg','jpeg','png'];
 
         if(in_array($ext,$allowed)){
 
-            $photo =
-                "profile_".
-                $user_id.
-                "_".
-                time().
-                ".".
-                $ext;
+            $photo = "profile_".$user_id."_".time().".".$ext;
 
-            move_uploaded_file(
-                $file['tmp_name'],
-                "../uploads/".$photo
-            );
+            move_uploaded_file($file['tmp_name'], "../uploads/".$photo);
         }
     }
 
     mysqli_query($conn,"
         UPDATE users
-        SET
-            name='$name',
-            photo='$photo'
+        SET name='$name', photo='$photo'
         WHERE id='$user_id'
     ");
 
     $_SESSION['name'] = $name;
 
-    echo "
-    <script>
-        alert('Profil berhasil diperbarui');
-        location='settings.php';
-    </script>
-    ";
+    echo "<script>alert('Profil berhasil diperbarui');location='settings.php';</script>";
     exit;
 }
 
-/*
-|--------------------------------------------------------------------------
-| CHANGE PASSWORD
-|--------------------------------------------------------------------------
-*/
-
+/* =========================
+   CHANGE PASSWORD
+========================= */
 if(isset($_POST['change_password'])){
 
-    $old_password = $_POST['old_password'] ?? '';
-    $new_password = $_POST['new_password'] ?? '';
-    $confirm_password = $_POST['confirm_password'] ?? '';
+    $old_password = $_POST['old_password'];
+    $new_password = $_POST['new_password'];
+    $confirm_password = $_POST['confirm_password'];
 
-    $check = mysqli_query(
-        $conn,
-        "SELECT * FROM users WHERE id='$user_id'"
-    );
+    if($old_password != $user['password']){
 
-    $data = mysqli_fetch_assoc($check);
+        echo "<script>alert('Password lama salah!');</script>";
 
-    if($old_password != $data['password']){
+    } elseif($new_password != $confirm_password){
 
-        echo "
-        <script>
-            alert('Password lama salah!');
-        </script>
-        ";
+        echo "<script>alert('Konfirmasi password tidak cocok!');</script>";
 
-    }
-
-    elseif(
-        strlen($new_password) < 8 ||
-        !preg_match('/[A-Z]/', $new_password) ||
-        !preg_match('/[a-z]/', $new_password) ||
-        !preg_match('/[0-9]/', $new_password) ||
-        !preg_match('/[^A-Za-z0-9]/', $new_password)
-    ){
-
-        echo "
-        <script>
-            alert('Password harus minimal 8 karakter dan mengandung huruf besar, huruf kecil, angka, serta simbol!');
-        </script>
-        ";
-
-    }
-
-    elseif($new_password != $confirm_password){
-
-        echo "
-        <script>
-            alert('Konfirmasi password tidak cocok!');
-        </script>
-        ";
-
-    }
-
-    else{
+    } else {
 
         mysqli_query($conn,"
             UPDATE users
@@ -141,320 +77,175 @@ if(isset($_POST['change_password'])){
             WHERE id='$user_id'
         ");
 
-        echo "
-        <script>
-            alert('Password berhasil diganti!');
-            location='settings.php';
-        </script>
-        ";
+        echo "<script>alert('Password berhasil diganti!');location='settings.php';</script>";
         exit;
     }
 }
 ?>
 
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <title>Settings</title>
 
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
 
 <link rel="stylesheet" href="../assets/style.css">
 
 </head>
 
-<body>
+<body class="dashboard">
 
-<!-- NAVBAR -->
+<!-- NAVBAR + DROPDOWN (ADMIN STYLE) -->
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
     <div class="container-fluid px-4">
 
-        <a class="navbar-brand d-flex align-items-center gap-2 fw-bold"
-           href="dashboard.php">
-
+        <a class="navbar-brand d-flex align-items-center gap-2 fw-bold" href="#">
             <i class="bi bi-fingerprint text-primary fs-3"></i>
             <span>Attendance System</span>
-
         </a>
 
         <div class="d-flex align-items-center">
 
-            <img src="../uploads/<?= $user['photo']; ?>"
-                 width="42"
-                 height="42"
-                 class="rounded-circle border border-2 border-white me-2"
-                 style="object-fit:cover;">
+            <!-- DROPDOWN -->
+            <div class="dropdown">
 
-            <span class="text-white fw-semibold">
-                <?= $_SESSION['name']; ?>
-            </span>
+                <a class="d-flex align-items-center text-decoration-none dropdown-toggle text-white"
+                   data-bs-toggle="dropdown">
+
+                    <img src="../uploads/<?= $user_photo; ?>"
+                         width="40"
+                         height="40"
+                         class="rounded-circle border border-2 border-white me-2"
+                         style="object-fit: cover;">
+
+                    <span class="fw-semibold"><?= $_SESSION['name']; ?></span>
+
+                </a>
+
+                <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-2 py-2"
+                    style="border-radius: 16px; min-width: 220px;">
+
+                    <li class="px-3 py-2 border-bottom">
+                        <div class="fw-bold"><?= $_SESSION['name']; ?></div>
+                        <div class="text-muted small"><?= $user['email']; ?></div>
+                    </li>
+
+                    <li><a class="dropdown-item" href="dashboard.php"><i class="bi bi-speedometer2 me-2"></i> Dashboard</a></li>
+                    <li><a class="dropdown-item" href="history.php"><i class="bi bi-calendar-range me-2"></i> History</a></li>
+                    <li><a class="dropdown-item" href="leave.php"><i class="bi bi-journal-plus me-2"></i> Pengajuan Izin / Sakit</a></li>
+                    <li><a class="dropdown-item" href="settings.php"><i class="bi bi-gear me-2"></i> Settings</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <a class="dropdown-item d-flex align-items-center gap-2 py-2 text-danger" href="../auth/logout.php">
+                            <i class="bi bi-box-arrow-right"></i>
+                            <span>Logout</span>
+                        </a>
+                    </li>
+                </ul>
+
+            </div>
 
         </div>
 
     </div>
 </nav>
 
+<!-- CONTENT -->
 <div class="container mt-5">
 
-    <!-- HEADER -->
-    <div class="card border-0 shadow-sm mb-4 overflow-hidden"
-         style="border-radius:20px;">
-
-        <div style="background: var(--primary-gradient); height:8px;"></div>
-
+    <div class="card mb-4">
         <div class="card-body p-4">
-
-            <span class="badge bg-primary mb-2">
-                SETTINGS
-            </span>
-
-            <h2 class="fw-bold mb-1">
-                Pengaturan Akun
-            </h2>
-
-            <p class="text-muted mb-0">
-                Kelola profil dan keamanan akun Anda.
-            </p>
-
+            <span class="badge bg-primary mb-2">SETTINGS</span>
+            <h3 class="fw-bold">Pengaturan Akun</h3>
+            <p class="text-muted mb-0">Kelola profil dan keamanan akun Anda</p>
         </div>
-
     </div>
 
     <div class="row g-4">
 
-        <!-- PROFIL -->
+        <!-- PROFILE -->
         <div class="col-lg-6">
-
-            <div class="card border-0 shadow-sm h-100"
-                 style="border-radius:20px;">
-
+            <div class="card">
                 <div class="card-body p-4">
 
-                    <h4 class="fw-bold mb-4">
-                        <i class="bi bi-person-circle text-success me-2"></i>
-                        Edit Profil
-                    </h4>
+                    <h5 class="fw-bold mb-3">
+                        <i class="bi bi-person-circle text-success"></i> Edit Profil
+                    </h5>
 
-                    <form method="POST"
-                          enctype="multipart/form-data">
+                    <form method="POST" enctype="multipart/form-data">
 
-                        <div class="text-center mb-4">
-
-                            <img src="../uploads/<?= $user['photo']; ?>"
-                                 width="150"
-                                 height="150"
-                                 class="rounded-circle border border-4 border-white shadow"
-                                 style="object-fit:cover;">
-
+                        <div class="text-center mb-3">
+                            <img src="../uploads/<?= $user_photo; ?>"
+                                 width="130"
+                                 height="130"
+                                 class="rounded-circle border shadow"
+                                 style="object-fit: cover;">
                         </div>
 
-                        <div class="mb-3">
+                        <input type="text"
+                               name="name"
+                               class="form-control mb-3"
+                               value="<?= $user['name']; ?>">
 
-                            <label class="form-label fw-semibold">
-                                Nama Lengkap
-                            </label>
+                        <input type="file"
+                               name="photo"
+                               class="form-control mb-3">
 
-                            <input type="text"
-                                   name="name"
-                                   class="form-control"
-                                   value="<?= $user['name']; ?>"
-                                   required>
-
-                        </div>
-
-                        <div class="mb-4">
-
-                            <label class="form-label fw-semibold">
-                                Foto Profil
-                            </label>
-
-                            <input type="file"
-                                   name="photo"
-                                   class="form-control"
-                                   accept=".jpg,.jpeg,.png">
-
-                        </div>
-
-                        <button type="submit"
-                                name="update_profile"
-                                class="btn btn-success w-100 py-2">
-
-                            <i class="bi bi-save"></i>
-                            Simpan Profil
-
+                        <button class="btn btn-success w-100" name="update_profile">
+                            Simpan
                         </button>
 
                     </form>
 
                 </div>
-
             </div>
-
         </div>
 
         <!-- PASSWORD -->
         <div class="col-lg-6">
-
-            <div class="card border-0 shadow-sm h-100"
-                 style="border-radius:20px;">
-
+            <div class="card">
                 <div class="card-body p-4">
 
-                    <h4 class="fw-bold mb-4">
-
-                        <i class="bi bi-shield-lock text-primary me-2"></i>
-                        Ganti Password
-
-                    </h4>
+                    <h5 class="fw-bold mb-3">
+                        <i class="bi bi-shield-lock text-primary"></i> Ganti Password
+                    </h5>
 
                     <form method="POST">
 
-                        <div class="mb-3">
+                        <input type="password"
+                               name="old_password"
+                               class="form-control mb-3"
+                               placeholder="Password lama">
 
-                            <label class="form-label fw-semibold">
-                                Password Lama
-                            </label>
+                        <input type="password"
+                               name="new_password"
+                               class="form-control mb-3"
+                               placeholder="Password baru">
 
-                            <div class="input-group">
+                        <input type="password"
+                               name="confirm_password"
+                               class="form-control mb-3"
+                               placeholder="Konfirmasi password">
 
-                                <input type="password"
-                                       name="old_password"
-                                       id="old_password"
-                                       class="form-control"
-                                       required>
-
-                                <button type="button"
-                                        class="btn btn-outline-secondary"
-                                        onclick="togglePassword('old_password', this)">
-
-                                    <i class="bi bi-eye"></i>
-
-                                </button>
-
-                            </div>
-
-                        </div>
-
-                        <div class="mb-3">
-
-                            <label class="form-label fw-semibold">
-                                Password Baru
-                            </label>
-
-                            <div class="input-group">
-
-                                <input type="password"
-                                       name="new_password"
-                                       id="new_password"
-                                       class="form-control"
-                                       required>
-
-                                <button type="button"
-                                        class="btn btn-outline-secondary"
-                                        onclick="togglePassword('new_password', this)">
-
-                                    <i class="bi bi-eye"></i>
-
-                                </button>
-
-                            </div>
-
-                            <small class="text-muted">
-                                Minimal 8 karakter, huruf besar, huruf kecil, angka, dan simbol.
-                            </small>
-
-                            <div id="passwordAlert"
-                                 class="alert alert-danger mt-2 d-none">
-                            </div>
-
-                        </div>
-
-                        <div class="mb-4">
-
-                            <label class="form-label fw-semibold">
-                                Konfirmasi Password
-                            </label>
-
-                            <div class="input-group">
-
-                                <input type="password"
-                                       name="confirm_password"
-                                       id="confirm_password"
-                                       class="form-control"
-                                       required>
-
-                                <button type="button"
-                                        class="btn btn-outline-secondary"
-                                        onclick="togglePassword('confirm_password', this)">
-
-                                    <i class="bi bi-eye"></i>
-
-                                </button>
-
-                            </div>
-
-                        </div>
-
-                        <button type="submit"
-                                name="change_password"
-                                class="btn btn-primary w-100 py-2">
-
-                            <i class="bi bi-shield-check"></i>
+                        <button class="btn btn-primary w-100" name="change_password">
                             Ganti Password
-
                         </button>
 
                     </form>
 
                 </div>
-
             </div>
-
         </div>
-
-    </div>
-
-    <div class="mt-4">
-
-        <a href="dashboard.php"
-           class="btn btn-secondary px-4 py-2">
-
-            <i class="bi bi-arrow-left"></i>
-            Kembali ke Dashboard
-
-        </a>
 
     </div>
 
 </div>
 
-<script>
-function togglePassword(id, button) {
-
-    let input = document.getElementById(id);
-    let icon = button.querySelector('i');
-
-    if(input.type === "password") {
-
-        input.type = "text";
-        icon.classList.remove("bi-eye");
-        icon.classList.add("bi-eye-slash");
-
-    } else {
-
-        input.type = "password";
-        icon.classList.remove("bi-eye-slash");
-        icon.classList.add("bi-eye");
-
-    }
-}
-</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
 </body>
 </html>

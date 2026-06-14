@@ -1,8 +1,25 @@
 <?php
 session_start();
-include '../config/database.php';
+include '../config/database.php'; // ✅ HARUS DI ATAS
+
+if(!isset($_SESSION['user_id'])){
+    header("Location: ../index.php");
+    exit;
+}
 
 date_default_timezone_set('Asia/Jakarta');
+
+$user_id = (int)$_SESSION['user_id'];
+
+/* ✅ cek user */
+$cekUser = mysqli_query(
+    $conn,
+    "SELECT id FROM users WHERE id='$user_id'"
+);
+
+if(mysqli_num_rows($cekUser) == 0){
+    die("User tidak ditemukan.");
+}
 
 if(isset($_POST['checkin'])) {
 
@@ -11,8 +28,9 @@ if(isset($_POST['checkin'])) {
     $latitude = $_POST['latitude'];
     $longitude = $_POST['longitude'];
 
+    $attendance_date = date("Y-m-d");
     $time = date("Y-m-d H:i:s");
-    $current_time = date("H:i:s");
+    $current_time = date("H:i:s"); // ✅ FIX ERROR
 
     $file = $_FILES['selfie']['name'];
     $tmp  = $_FILES['selfie']['tmp_name'];
@@ -20,32 +38,48 @@ if(isset($_POST['checkin'])) {
     move_uploaded_file($tmp, "../uploads/".$file);
 
     if($current_time <= "08:00:00") {
-
         $status = "Hadir";
-
     } else {
-
         $status = "Terlambat";
+    }
 
+    $cek = mysqli_query(
+        $conn,
+        "SELECT id
+         FROM attendance
+         WHERE user_id='$user_id'
+         AND attendance_date='$attendance_date'"
+    );
+
+    if(mysqli_num_rows($cek) > 0){
+        echo "
+        <script>
+            alert('Anda sudah melakukan absensi hari ini');
+            window.location='dashboard.php';
+        </script>
+        ";
+        exit;
     }
 
     mysqli_query($conn, "
-    INSERT INTO attendance(
-        user_id,
-        check_in,
-        selfie,
-        latitude,
-        longitude,
-        status
-    )
-    VALUES(
-        '$user_id',
-        '$time',
-        '$file',
-        '$latitude',
-        '$longitude',
-        '$status'
-    )
+        INSERT INTO attendance(
+            user_id,
+            attendance_date,
+            check_in,
+            selfie,
+            latitude,
+            longitude,
+            status
+        )
+        VALUES(
+            '$user_id',
+            '$attendance_date',
+            '$time',
+            '$file',
+            '$latitude',
+            '$longitude',
+            '$status'
+        )
     ");
 
     echo "

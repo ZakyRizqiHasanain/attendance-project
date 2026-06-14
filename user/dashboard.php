@@ -19,6 +19,13 @@ date_default_timezone_set('Asia/Jakarta');
 $today = date('Y-m-d');
 $check_today = mysqli_query($conn, "SELECT * FROM attendance WHERE user_id = '$user_id' AND DATE(check_in) = '$today' LIMIT 1");
 $attendance_today = mysqli_fetch_assoc($check_today);
+$leave_today = mysqli_fetch_assoc(mysqli_query($conn,"
+SELECT * FROM leave_requests
+WHERE user_id='$user_id'
+AND leave_date='$today'
+AND approval_status='Approved'
+LIMIT 1
+"));
 
 // Generate time-based greeting
 $hour = date('H');
@@ -42,8 +49,10 @@ if ($hour >= 5 && $hour < 11) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="../assets/style.css">
+
+    <link rel="stylesheet" href="../assets/style.css">
 </head>
-<body>
+<body class="dashboard">
 
 <!-- NAVBAR -->
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
@@ -67,18 +76,10 @@ if ($hour >= 5 && $hour < 11) {
                     <div class="fw-bold text-dark"><?= $_SESSION['name']; ?></div>
                     <div class="text-muted small text-truncate" style="max-width: 170px;"><?= $user_data['email']; ?></div>
                 </li>
-                <li>
-                    <a class="dropdown-item d-flex align-items-center gap-2 py-2" href="history.php">
-                        <i class="bi bi-calendar-range text-primary"></i>
-                        <span>Riwayat Presensi</span>
-                    </a>
-                </li>
-                <li>
-                    <a class="dropdown-item d-flex align-items-center gap-2 py-2" href="settings.php">
-                        <i class="bi bi-person-bounding-box text-success"></i>
-                        <span>Settings</span>
-                    </a>
-                </li>
+                <li><a class="dropdown-item" href="dashboard.php"><i class="bi bi-speedometer2 me-2"></i> Dashboard</a></li>
+                <li><a class="dropdown-item" href="history.php"><i class="bi bi-calendar-range me-2"></i> History</a></li>
+                <li><a class="dropdown-item" href="leave.php"><i class="bi bi-journal-plus me-2"></i> Pengajuan Izin / Sakit</a></li>
+                <li><a class="dropdown-item" href="settings.php"><i class="bi bi-gear me-2"></i> Settings</a></li>
                 <li><hr class="dropdown-divider"></li>
                 <li>
                     <a class="dropdown-item d-flex align-items-center gap-2 py-2 text-danger" href="../auth/logout.php">
@@ -103,7 +104,7 @@ if ($hour >= 5 && $hour < 11) {
                 <div style="background: var(--primary-gradient); height: 8px;"></div>
                 <div class="card-body p-4">
                     <span class="badge bg-primary mb-2 text-uppercase">Dashboard Karyawan</span>
-                    <h2 class="fw-bold mb-1 dashboard-header"><?= $greeting; ?>, <?= $_SESSION['name']; ?>!</h2>
+                    <h2 class="dashboard-title mb-1"><?= $greeting; ?>, <?= $_SESSION['name']; ?>!</h2>
                     <p class="text-muted mb-0">Silakan lakukan absensi masuk atau pulang untuk mencatat kehadiran harian Anda.</p>
                 </div>
             </div>
@@ -116,9 +117,9 @@ if ($hour >= 5 && $hour < 11) {
                     <div class="card text-center border-0 h-100 shadow-sm" style="border-radius: 20px;">
                         <div class="card-body p-4 d-flex flex-column justify-content-between">
                             <div>
-                                <div class="mx-auto mb-3 d-flex align-items-center justify-content-center bg-success bg-opacity-10 text-success rounded-circle" style="width: 70px; height: 70px;">
-                                    <i class="bi bi-box-arrow-in-right fs-1"></i>
-                                </div>
+                                <div class="icon-box mx-auto mb-3 bg-success bg-opacity-10 text-success">
+    <i class="bi bi-box-arrow-in-right fs-1"></i>
+</div>
                                 <h4 class="fw-bold mb-2 text-dark">Check In</h4>
                                 <p class="text-muted small mb-4">Lakukan absensi masuk untuk mencatat jam mulai kerja Anda hari ini.</p>
                             </div>
@@ -140,10 +141,10 @@ if ($hour >= 5 && $hour < 11) {
                     <div class="card text-center border-0 h-100 shadow-sm" style="border-radius: 20px;">
                         <div class="card-body p-4 d-flex flex-column justify-content-between">
                             <div>
-                                <div class="mx-auto mb-3 d-flex align-items-center justify-content-center bg-warning bg-opacity-10 text-warning rounded-circle" style="width: 70px; height: 70px;">
-                                    <i class="bi bi-box-arrow-right fs-1"></i>
-                                </div>
-                                <h4 class="fw-bold mb-2 text-dark">Check Out</h4>
+                                <div class="icon-box mx-auto mb-3 bg-warning bg-opacity-10 text-warning">
+    <i class="bi bi-box-arrow-right fs-1"></i>
+</div>
+                                <h4 class="dashboard-title mb-2">Check Out</h4>
                                 <p class="text-muted small mb-4">Lakukan absensi pulang untuk mengakhiri jam kerja Anda hari ini.</p>
                             </div>
                             <div>
@@ -196,7 +197,7 @@ if ($hour >= 5 && $hour < 11) {
                     </h5>
                     
                     <div class="d-flex align-items-center mb-3">
-                        <div class="bg-light p-2 rounded-3 me-3 text-secondary">
+                        <div class="icon-box bg-light text-secondary me-3">
                             <i class="bi bi-box-arrow-in-right fs-5"></i>
                         </div>
                         <div>
@@ -227,16 +228,20 @@ if ($hour >= 5 && $hour < 11) {
                             <div class="text-muted small">Status Kehadiran</div>
                             <div>
                                 <?php 
-                                if(!$attendance_today) { 
-                                    echo '<span class="badge bg-danger">Belum Absen</span>';
-                                } else {
-                                    if($attendance_today['status'] == 'Hadir') {
-                                        echo '<span class="badge bg-success">Hadir</span>';
-                                    } else {
-                                        echo '<span class="badge bg-warning text-dark">Terlambat</span>';
-                                    }
-                                }
-                                ?>
+if($leave_today){
+    echo '<span class="badge bg-primary">Izin / Sakit</span>';
+
+} elseif(!$attendance_today) {
+    echo '<span class="badge bg-danger">Belum Absen</span>';
+
+} else {
+    if($attendance_today['status'] == 'Hadir') {
+        echo '<span class="badge bg-success">Hadir</span>';
+    } else {
+        echo '<span class="badge bg-warning text-dark">Terlambat</span>';
+    }
+}
+?>
                             </div>
                         </div>
                     </div>
