@@ -437,3 +437,59 @@ h3.fw-bold {
     letter-spacing: -0.5px;
     color: #0f172a;
 }
+
+/* CARD STATS */
+.card-stats {
+    border: none;
+    border-radius: 20px;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+/* ICON BOX */
+.icon-bg {
+    width: 52px;
+    height: 52px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    background: #eef2f5;
+    color: #2c3e50;
+}
+
+/* ADD BUTTON */
+.btn-add {
+    background: #2c6e2f;
+    color: white;
+    padding: 8px 18px;
+    border-radius: 40px;
+    text-decoration: none;
+}
+.btn-add:hover {
+    background: #1f5422;
+}
+
+/* AVATAR */
+.avatar-circle {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+/* BADGES */
+.badge-admin {
+    background: #b91c1c;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 20px;
+}
+
+.badge-user {
+    background: #4b5563;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 20px;
+}
