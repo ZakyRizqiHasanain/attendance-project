@@ -2,42 +2,89 @@
 session_start();
 include '../config/database.php';
 
-if(!isset($_SESSION['user_id'])){
+if (!isset($_SESSION['user_id'])) {
     header("Location: ../index.php");
     exit;
 }
 
-$user_id = $_SESSION['user_id'];
+if (!isset($conn) || !($conn instanceof mysqli)) {
+    die("Koneksi database gagal.");
+}
 
-// USER DATA
-$user = mysqli_fetch_assoc(mysqli_query($conn,"SELECT * FROM users WHERE id='$user_id'"));
-$user_photo = !empty($user['photo']) ? $user['photo'] : 'default.png';
+$user_id = (int)$_SESSION['user_id'];
 
-// STATISTIK USER
-$total_attendance = mysqli_fetch_assoc(mysqli_query($conn,"
-SELECT COUNT(*) as total 
-FROM attendance 
-WHERE user_id='$user_id'
-"))['total'];
+/* =========================
+   USER DATA
+========================= */
+$user_query = mysqli_query(
+    $conn,
+    "SELECT id, name, email, photo
+     FROM users
+     WHERE id = $user_id
+     LIMIT 1"
+);
 
-$hadir = mysqli_fetch_assoc(mysqli_query($conn,"
-SELECT COUNT(*) as total 
-FROM attendance 
-WHERE user_id='$user_id' AND status='Hadir'
-"))['total'];
+$user = mysqli_fetch_assoc($user_query);
 
-$terlambat = mysqli_fetch_assoc(mysqli_query($conn,"
-SELECT COUNT(*) as total 
-FROM attendance 
-WHERE user_id='$user_id' AND status='Terlambat'
-"))['total'];
+if (!$user) {
+    session_destroy();
+    header("Location: ../index.php");
+    exit;
+}
 
-// DATA ATTENDANCE USER
-$query = mysqli_query($conn,"
-SELECT * FROM attendance
-WHERE user_id='$user_id'
-ORDER BY id DESC
-");
+/* =========================
+   FOTO USER
+========================= */
+$user_photo = 'default.png';
+
+if (
+    !empty($user['photo']) &&
+    file_exists("../uploads/" . basename($user['photo']))
+) {
+    $user_photo = basename($user['photo']);
+}
+
+/* =========================
+   STATISTIK USER
+========================= */
+$total_attendance = mysqli_fetch_assoc(
+    mysqli_query($conn, "SELECT COUNT(*) AS total FROM attendance WHERE user_id = $user_id")
+)['total'] ?? 0;
+
+$hadir = mysqli_fetch_assoc(
+    mysqli_query($conn, "SELECT COUNT(*) AS total FROM attendance WHERE user_id = $user_id AND status='Hadir'")
+)['total'] ?? 0;
+
+$terlambat = mysqli_fetch_assoc(
+    mysqli_query($conn, "SELECT COUNT(*) AS total FROM attendance WHERE user_id = $user_id AND status='Terlambat'")
+)['total'] ?? 0;
+
+$alpha = mysqli_fetch_assoc(
+    mysqli_query($conn, "SELECT COUNT(*) AS total FROM attendance WHERE user_id = $user_id AND status='Alpha'")
+)['total'] ?? 0;
+
+$izin = mysqli_fetch_assoc(
+    mysqli_query($conn, "SELECT COUNT(*) AS total FROM attendance WHERE user_id = $user_id AND status='Izin'")
+)['total'] ?? 0;
+
+$sakit = mysqli_fetch_assoc(
+    mysqli_query($conn, "SELECT COUNT(*) AS total FROM attendance WHERE user_id = $user_id AND status='Sakit'")
+)['total'] ?? 0;
+
+/* =========================
+   DATA ATTENDANCE USER
+========================= */
+$query = mysqli_query(
+    $conn,
+    "SELECT *
+     FROM attendance
+     WHERE user_id = $user_id
+     ORDER BY attendance_date DESC, id DESC"
+);
+
+if (!$query) {
+    die("Query attendance gagal: " . mysqli_error($conn));
+}
 ?>
 
 <!DOCTYPE html>
@@ -71,25 +118,25 @@ ORDER BY id DESC
         <a class="d-flex align-items-center text-white text-decoration-none dropdown-toggle"
            data-bs-toggle="dropdown">
 
-            <img src="../uploads/<?= $user_photo ?>"
+            <img src="../uploads/<?= htmlspecialchars($user_photo) ?>"
                  width="40"
                  height="40"
                  class="rounded-circle border border-2 border-white me-2"
                  style="object-fit:cover;">
 
-            <span><?= $_SESSION['name']; ?></span>
+            <span><?= htmlspecialchars($user['name']); ?></span>
         </a>
 
         <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-2">
 
             <li class="px-3 py-2 border-bottom">
-                <div class="fw-bold"><?= $_SESSION['name']; ?></div>
-                <small class="text-muted"><?= $user['email']; ?></small>
+                <div class="fw-bold"><?= htmlspecialchars($user['name']); ?></div>
+                <small class="text-muted"><?= htmlspecialchars($user['email']); ?></small>
             </li>
 
             <li><a class="dropdown-item" href="dashboard.php"><i class="bi bi-speedometer2 me-2"></i> Dashboard</a></li>
             <li><a class="dropdown-item" href="history.php"><i class="bi bi-calendar-range me-2"></i> History</a></li>
-            <li><a class="dropdown-item" href="leave.php"><i class="bi bi-journal-plus me-2"></i> Pengajaun Izin / Sakit</a></li>
+            <li><a class="dropdown-item" href="leave.php"><i class="bi bi-journal-plus me-2"></i> Pengajuan Izin / Sakit</a></li>
             <li><a class="dropdown-item" href="settings.php"><i class="bi bi-gear me-2"></i> Settings</a></li>
 
             <li><hr class="dropdown-divider"></li>
@@ -119,16 +166,16 @@ ORDER BY id DESC
         </a>
     </div>
 
-    <!-- STATS -->
-    <div class="row g-4 mb-4">
+    <!-- STATISTIK -->
+    <div class="row g-4 mb-5">
 
         <div class="col-md-4">
             <div class="card card-stats">
                 <div class="card-body d-flex align-items-center">
                     <div class="icon-bg me-3"><i class="bi bi-database"></i></div>
                     <div>
-                        <h6 class="text-muted">Total Absen</h6>
-                        <h3><?= $total_attendance ?></h3>
+                        <h6 class="text-muted mb-1">Total Records</h6>
+                        <h3 class="mb-0"><?= (int)$total_attendance ?></h3>
                     </div>
                 </div>
             </div>
@@ -139,8 +186,8 @@ ORDER BY id DESC
                 <div class="card-body d-flex align-items-center">
                     <div class="icon-bg me-3"><i class="bi bi-check-circle"></i></div>
                     <div>
-                        <h6 class="text-muted">Hadir</h6>
-                        <h3><?= $hadir ?></h3>
+                        <h6 class="text-muted mb-1">Hadir</h6>
+                        <h3 class="mb-0"><?= (int)$hadir ?></h3>
                     </div>
                 </div>
             </div>
@@ -151,8 +198,50 @@ ORDER BY id DESC
                 <div class="card-body d-flex align-items-center">
                     <div class="icon-bg me-3"><i class="bi bi-clock"></i></div>
                     <div>
-                        <h6 class="text-muted">Terlambat</h6>
-                        <h3><?= $terlambat ?></h3>
+                        <h6 class="text-muted mb-1">Terlambat</h6>
+                        <h3 class="mb-0"><?= (int)$terlambat ?></h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card card-stats">
+                <div class="card-body d-flex align-items-center">
+                    <div class="icon-bg me-3">
+                        <i class="bi bi-person-x"></i>
+                    </div>
+                    <div>
+                        <h6 class="text-muted mb-1">Alpha</h6>
+                        <h3 class="mb-0"><?= (int)$alpha ?></h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card card-stats">
+                <div class="card-body d-flex align-items-center">
+                    <div class="icon-bg me-3">
+                        <i class="bi bi-journal-check"></i>
+                    </div>
+                    <div>
+                        <h6 class="text-muted mb-1">Izin</h6>
+                        <h3 class="mb-0"><?= (int)$izin ?></h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card card-stats">
+                <div class="card-body d-flex align-items-center">
+                    <div class="icon-bg me-3">
+                        <i class="bi bi-heart-pulse"></i>
+                    </div>
+                    <div>
+                        <h6 class="text-muted mb-1">Sakit</h6>
+                        <h3 class="mb-0"><?= (int)$sakit ?></h3>
                     </div>
                 </div>
             </div>
@@ -185,7 +274,11 @@ ORDER BY id DESC
 
                 <tbody>
 
-                <?php $no=1; while($data=mysqli_fetch_assoc($query)) { ?>
+                <?php
+                $no = 1;
+                if(mysqli_num_rows($query) > 0):
+                while($data = mysqli_fetch_assoc($query)):
+                ?>
 
                     <tr>
                         <td><?= $no++ ?></td>
@@ -206,18 +299,26 @@ ORDER BY id DESC
                                 echo '<span class="badge bg-primary">Izin</span>';
                             } elseif($data['status']=='Sakit'){
                                 echo '<span class="badge bg-info">Sakit</span>';
-                            } else {
+                            } elseif($data['status']=='Alpha'){
                                 echo '<span class="badge bg-danger">Tidak Hadir</span>';
                             }
                             ?>
                         </td>
 
-                        <td><?= $data['latitude'] ?></td>
-                        <td><?= $data['longitude'] ?></td>
+                        <td><?= $data['latitude'] ?: '-' ?></td>
+                        <td><?= $data['longitude'] ?: '-' ?></td>
                     </tr>
 
-                <?php } ?>
-
+                <?php
+                endwhile;
+                else:
+                ?>
+                <tr>
+                    <td colspan="7" class="text-center">
+                        Belum ada data absensi
+                    </td>
+                </tr>
+                <?php endif; ?>
                 </tbody>
 
             </table>

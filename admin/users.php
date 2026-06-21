@@ -2,26 +2,98 @@
 include '../auth/admin_check.php';
 include '../config/database.php';
 
-// Flash message
-if(isset($_SESSION['success'])) {
-    echo "<script>alert('".addslashes($_SESSION['success'])."');</script>";
+if (!isset($conn) || !($conn instanceof mysqli) || $conn->connect_error) {
+    die('Koneksi database gagal.');
+}
+
+/* =========================
+   FLASH MESSAGE
+========================= */
+if (isset($_SESSION['success'])) {
+    echo "<script>alert(" . json_encode($_SESSION['success']) . ");</script>";
     unset($_SESSION['success']);
 }
-if(isset($_SESSION['error'])) {
-    echo "<script>alert('".addslashes($_SESSION['error'])."');</script>";
+
+if (isset($_SESSION['error'])) {
+    echo "<script>alert(" . json_encode($_SESSION['error']) . ");</script>";
     unset($_SESSION['error']);
 }
 
-// Statistik
-$total_users = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as total FROM users"))['total'];
-$total_admin = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as total FROM users WHERE role = 'admin'"))['total'];
-$total_regular = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as total FROM users WHERE role = 'user'"))['total'];
+/* =========================
+   STATISTIK
+========================= */
+$total_users = 0;
+$total_admin = 0;
+$total_regular = 0;
 
-$query = mysqli_query($conn, "SELECT * FROM users ORDER BY id ASC");
+$result = mysqli_query($conn, "SELECT COUNT(*) AS total FROM users");
+if ($result) {
+    $row = mysqli_fetch_assoc($result);
+    $total_users = (int)$row['total'];
+}
 
-$admin_id = $_SESSION['user_id'];
-$admin = mysqli_fetch_assoc(mysqli_query($conn, "SELECT * FROM users WHERE id='$admin_id'"));
+$result = mysqli_query($conn, "SELECT COUNT(*) AS total FROM users WHERE role='admin'");
+if ($result) {
+    $row = mysqli_fetch_assoc($result);
+    $total_admin = (int)$row['total'];
+}
+
+$result = mysqli_query($conn, "SELECT COUNT(*) AS total FROM users WHERE role='user'");
+if ($result) {
+    $row = mysqli_fetch_assoc($result);
+    $total_regular = (int)$row['total'];
+}
+
+/* =========================
+   DATA USER
+========================= */
+$query = mysqli_query(
+    $conn,
+    "SELECT
+        id,
+        name,
+        email,
+        password,
+        role,
+        photo,
+        created_at
+     FROM users
+     ORDER BY id ASC"
+);
+
+if (!$query) {
+    die("Query user gagal: " . mysqli_error($conn));
+}
+
+/* =========================
+   DATA ADMIN LOGIN
+========================= */
+$admin_id = (int)$_SESSION['user_id'];
+$admin = mysqli_fetch_assoc(mysqli_query($conn, "SELECT * FROM users WHERE id=$admin_id"));
 $admin_photo = !empty($admin['photo']) ? $admin['photo'] : 'default.png';
+
+if (!$admin) {
+    die("Data admin tidak ditemukan.");
+}
+
+$stmt = $conn->prepare("
+    SELECT
+        id,
+        name,
+        email,
+        photo
+    FROM users
+    WHERE id = ?
+    LIMIT 1
+");
+
+if (!$stmt) {
+    die("Prepare gagal: " . $conn->error);
+}
+
+$stmt->bind_param("i", $admin_id);
+$stmt->execute();
+$stmt->close();
 ?>
 
 <!DOCTYPE html>
@@ -41,59 +113,44 @@ $admin_photo = !empty($admin['photo']) ? $admin['photo'] : 'default.png';
 
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
     <div class="container-fluid px-4">
-        <a class="navbar-brand fw-bold" href="dashboard.php">
-            <i class="bi bi-fingerprint fs-3 me-2"></i> Attendance System
+        <a class="navbar-brand d-flex align-items-center gap-2 fw-bold" href="#">
+            <i class="bi bi-fingerprint text-primary fs-3"></i>
+            <span>Attendance System</span>
         </a>
+
         <div class="d-flex align-items-center">
-            <a href="export.php" class="btn btn-outline-light btn-sm me-3">Export Excel</a>
+            <a href="export.php" class="btn btn-outline-light btn-sm me-3">
+                Export Excel
+            </a>
+
             <div class="dropdown">
                 <a href="#" class="d-flex align-items-center text-decoration-none dropdown-toggle text-white" data-bs-toggle="dropdown">
-                    <img src="../uploads/<?= $admin_photo; ?>" width="42" height="42" class="rounded-circle border border-2 border-white me-2" style="object-fit:cover;">
-                    <span class="fw-semibold"><?= htmlspecialchars($admin['name']); ?></span>
+                    <img src="../uploads/<?= htmlspecialchars($admin_photo); ?>" width="42" height="42" class="rounded-circle border border-2 border-white me-2" style="object-fit:cover;">
+                    <span class="fw-semibold"><?= htmlspecialchars($admin['name'] ?? 'Admin'); ?></span>
                 </a>
+
                 <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-2 py-2" style="border-radius:16px;min-width:250px;">
+                    <li class="px-3 py-2 border-bottom">
+                        <div class="fw-bold"><?= htmlspecialchars($admin['name'] ?? 'Admin'); ?></div>
+                        <div class="text-muted small"><?= htmlspecialchars($admin['email'] ?? ''); ?></div>
+                    </li>
 
-    <li class="px-3 py-2 border-bottom">
-        <div class="fw-bold"><?= htmlspecialchars($admin['name']); ?></div>
-        <div class="text-muted small"><?= htmlspecialchars($admin['email']); ?></div>
-    </li>
+                    <li><a class="dropdown-item" href="dashboard.php"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+                    <li><a class="dropdown-item" href="users.php"><i class="bi bi-people-fill"></i> Users</a></li>
+                    <li><a class="dropdown-item" href="attendance_data.php"><i class="bi bi-calendar-check"></i> Attendance</a></li>
+                    <li><a class="dropdown-item" href="qr_generate.php"><i class="bi bi-qr-code"></i> QR Attendance</a></li>
+                    <li><a class="dropdown-item" href="settings.php"><i class="bi bi-gear-fill"></i> Settings</a></li>
+                    <li><a class="dropdown-item" href="leave.php"><i class="bi bi-journal-medical"></i> Pengajuan Izin / Sakit</a></li>
 
-    <li><a class="dropdown-item d-flex align-items-center gap-2" href="dashboard.php">
-        <i class="bi bi-speedometer2"></i> Dashboard
-    </a></li>
-
-    <li><a class="dropdown-item d-flex align-items-center gap-2" href="users.php">
-        <i class="bi bi-people-fill"></i> Users
-    </a></li>
-
-    <li><a class="dropdown-item d-flex align-items-center gap-2" href="attendance_data.php">
-        <i class="bi bi-calendar-check"></i> Attendance
-    </a></li>
-
-    <li><a class="dropdown-item d-flex align-items-center gap-2" href="qr_generate.php">
-        <i class="bi bi-qr-code"></i> QR Attendance
-    </a></li>
-
-    <li><a class="dropdown-item d-flex align-items-center gap-2" href="settings.php">
-        <i class="bi bi-gear-fill"></i> Settings
-    </a></li>
-
-    <li><a class="dropdown-item d-flex align-items-center gap-2" href="leave.php">
-        <i class="bi bi-journal-medical"></i> Pengajuan Izin / Sakit
-    </a></li>
-
-    <li><hr class="dropdown-divider"></li>
-
-    <li>
-        <a class="dropdown-item d-flex align-items-center gap-2 text-danger"
-           href="../auth/logout.php"
-           onclick="return confirm('Yakin ingin keluar?');">
-            <i class="bi bi-box-arrow-right"></i> Logout
-        </a>
-    </li>
-
-</ul>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <a class="dropdown-item text-danger" href="../auth/logout.php" onclick="return confirm('Yakin ingin keluar?');">
+                            <i class="bi bi-box-arrow-right"></i> Logout
+                        </a>
+                    </li>
+                </ul>
             </div>
+
         </div>
     </div>
 </nav>
@@ -170,38 +227,85 @@ $admin_photo = !empty($admin['photo']) ? $admin['photo'] : 'default.png';
                     </tr>
                 </thead>
                 <tbody>
-                    <?php
-                    $no = 1;
-                    while($data = mysqli_fetch_assoc($query)) {
-                        $photo = !empty($data['photo']) ? "../uploads/" . $data['photo'] : "../uploads/default.png";
-                    ?>
-                    <tr>
-                        <td><?= $no++; ?></td>
-                        <td><img src="<?= $photo ?>" class="avatar-circle" alt="Photo"></td>
-                        <td class="fw-semibold"><?= htmlspecialchars($data['name']) ?></td>
-                        <td><?= htmlspecialchars($data['email']) ?></td>
-                        <td class="password-cell"><?= htmlspecialchars($data['password']) ?></td>
-                        <td>
-                            <?php if($data['role'] == 'admin') { ?>
-                                <span class="badge-admin">Admin</span>
-                            <?php } else { ?>
-                                <span class="badge-user">User</span>
-                            <?php } ?>
-                        </td>
-                        <td><?= date('d-m-Y H:i', strtotime($data['created_at'])) ?></td>
-                        <td>
-                            <?php if($data['role'] != 'admin') { ?>
-                                <a href="delete_user.php?id=<?= $data['id'] ?>" 
-                                   class="btn-delete" 
-                                   onclick="return confirm('Yakin ingin menghapus user <?= htmlspecialchars($data['name']) ?>?')">
-                                    <i class="bi bi-trash"></i> Delete
-                                </a>
-                            <?php } else { ?>
-                                <span class="badge-protected"><i class="bi bi-shield-check"></i> Protected</span>
-                            <?php } ?>
-                        </td>
-                    </tr>
-                    <?php } ?>
+
+                <?php if (mysqli_num_rows($query) > 0) { ?>
+
+                <?php
+                $no = 1;
+
+                while($data = mysqli_fetch_assoc($query)) {
+
+                    $photo = "../uploads/default.png";
+
+                    if (
+                        !empty($data['photo']) &&
+                        file_exists("../uploads/" . basename($data['photo']))
+                    ) {
+                        $photo = "../uploads/" . basename($data['photo']);
+                    }
+                ?>
+                <tr>
+                    <td><?= $no++; ?></td>
+
+                    <td>
+                        <img src="<?= htmlspecialchars($photo) ?>"
+                            class="avatar-circle"
+                            alt="Photo">
+                    </td>
+
+                    <td class="fw-semibold">
+                        <?= htmlspecialchars($data['name']) ?>
+                    </td>
+
+                    <td>
+                        <?= htmlspecialchars($data['email']) ?>
+                    </td>
+
+                    <td class="password-cell">
+                        ********
+                    </td>
+
+                    <td>
+                        <?php if($data['role'] === 'admin') { ?>
+                            <span class="badge-admin">Admin</span>
+                        <?php } else { ?>
+                            <span class="badge-user">User</span>
+                        <?php } ?>
+                    </td>
+
+                    <td>
+                        <?= !empty($data['created_at'])
+                            ? date('d-m-Y H:i', strtotime($data['created_at']))
+                            : '-' ?>
+                    </td>
+
+                    <td>
+                        <?php if($data['role'] !== 'admin') { ?>
+                            <a href="delete_user.php?id=<?= (int)$data['id'] ?>"
+                            class="btn-delete"
+                            onclick="return confirm(<?= json_encode('Yakin ingin menghapus user '.$data['name'].'?') ?>)">
+                                <i class="bi bi-trash"></i> Delete
+                            </a>
+                        <?php } else { ?>
+                            <span class="badge-protected">
+                                <i class="bi bi-shield-check"></i> Protected
+                            </span>
+                        <?php } ?>
+                    </td>
+                </tr>
+
+                <?php } ?>
+
+                <?php } else { ?>
+
+                <tr>
+                    <td colspan="8" class="text-center py-4">
+                        Tidak ada data user
+                    </td>
+                </tr>
+
+                <?php } ?>
+
                 </tbody>
             </table>
         </div>
@@ -218,7 +322,7 @@ $admin_photo = !empty($admin['photo']) ? $admin['photo'] : 'default.png';
         $('#usersTable').DataTable({
             pageLength: 10,
             language: {
-                url: '//cdn.datatables.net/plug-ins/1.13.4/i18n/id.json'
+                url: 'https://cdn.datatables.net/plug-ins/1.13.4/i18n/id.json'
             },
             columnDefs: [
                 { orderable: false, targets: [1, 4, 7] }

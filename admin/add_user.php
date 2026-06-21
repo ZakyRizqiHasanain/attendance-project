@@ -1,56 +1,155 @@
 <?php
+session_start();
+
 include '../auth/admin_check.php';
 include '../config/database.php';
 
-if(isset($_POST['save'])) {
+/* =========================
+   CSRF TOKEN (SECURITY)
+========================= */
+if (!isset($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
 
-    $name = $_POST['name'];
-    $email = $_POST['email'];
-    $password = $_POST['password'];
-    $role = $_POST['role'];
+/* =========================
+   PROCESS FORM
+========================= */
+if (isset($_POST['save'])) {
 
-    /*
-    |--------------------------------------------------------------------------
-    | Upload Photo
-    |--------------------------------------------------------------------------
-    */
-    $photo = $_FILES['photo']['name'];
-    $tmp   = $_FILES['photo']['tmp_name'];
-
-    if($photo != '') {
-        $ext = pathinfo($photo, PATHINFO_EXTENSION);
-        $photo = time() . '_' . uniqid() . '.' . $ext;
-        move_uploaded_file($tmp, "../uploads/" . $photo);
-    } else {
-        $photo = 'default.png';
+    // CSRF CHECK
+    if (!isset($_POST['csrf']) || $_POST['csrf'] !== $_SESSION['csrf_token']) {
+        die('CSRF token tidak valid');
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | Check Email
-    |--------------------------------------------------------------------------
-    */
-    $check = mysqli_query($conn, "SELECT * FROM users WHERE email='$email'");
-    if(mysqli_num_rows($check) > 0) {
-        echo "<script>alert('Email sudah digunakan!'); window.location='add_user.php';</script>";
+    $name = trim($_POST['name'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    $role = trim($_POST['role'] ?? '');
+    $passwordRaw = $_POST['password'] ?? '';
+
+    if (empty($name)) {
+        die('Nama tidak boleh kosong');
+    }
+
+    if (strlen($passwordRaw) < 6) {
+        echo "<script>alert('Password minimal 6 karakter');history.back();</script>";
         exit;
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | Insert User
-    |--------------------------------------------------------------------------
-    */
-    mysqli_query($conn, "INSERT INTO users(name, email, password, photo, role) VALUES('$name', '$email', '$password', '$photo', '$role')");
+    if (!in_array($role, ['admin', 'user'])) {
+        die('Role tidak valid');
+    }
 
-    echo "<script>alert('User berhasil ditambahkan!'); window.location='users.php';</script>";
-    exit;
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        echo "<script>alert('Format email tidak valid');history.back();</script>";
+        exit;
+    }
+
+    $password = password_hash($passwordRaw, PASSWORD_DEFAULT);
+
+    /* =========================
+       UPLOAD FOTO (SECURE)
+    ========================= */
+    $photo = 'default.png';
+
+    if (isset($_FILES['photo']) && $_FILES['photo']['error'] === 0) {
+
+        $tmp = $_FILES['photo']['tmp_name'];
+        $originalName = $_FILES['photo']['name'];
+        $size = $_FILES['photo']['size'];
+
+        // CEK SIZE (2MB)
+        if ($size > 2097152) {
+            echo "<script>alert('Ukuran foto maksimal 2 MB!');history.back();</script>";
+            exit;
+        }
+
+        // CEK MIME TYPE
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime = finfo_file($finfo, $tmp);
+        finfo_close($finfo);
+
+        $allowedMime = ['image/jpeg', 'image/png', 'image/webp'];
+
+        if (!in_array($mime, $allowedMime)) {
+            echo "<script>alert('File bukan gambar valid!');history.back();</script>";
+            exit;
+        }
+
+        // CEK EXTENSION
+        $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+        $allowedExt = ['jpg', 'jpeg', 'png', 'webp'];
+
+        if (!in_array($ext, $allowedExt)) {
+            echo "<script>alert('Format foto tidak didukung!');history.back();</script>";
+            exit;
+        }
+
+        // CEK BENAR GAMBAR
+        if (!getimagesize($tmp)) {
+            echo "<script>alert('File bukan gambar valid!');history.back();</script>";
+            exit;
+        }
+
+        // GENERATE NAME
+        $photo = time() . '_' . uniqid() . '.' . $ext;
+
+        $uploadPath = "../uploads/" . $photo;
+
+        if (!move_uploaded_file($tmp, $uploadPath)) {
+            echo "<script>alert('Gagal upload foto!');history.back();</script>";
+            exit;
+        }
+    }
+
+    /* =========================
+       CEK EMAIL DUPLIKAT
+    ========================= */
+    $stmt = $conn->prepare("SELECT id FROM users WHERE email=?");
+    $stmt->bind_param("s", $email);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    if ($result->num_rows > 0) {
+        echo "<script>alert('Email sudah digunakan!');window.location='add_user.php';</script>";
+        exit;
+    }
+    $stmt->close();
+
+    /* =========================
+       INSERT USER
+    ========================= */
+    $stmt = $conn->prepare("
+        INSERT INTO users (name, email, password, photo, role)
+        VALUES (?, ?, ?, ?, ?)
+    ");
+
+    $stmt->bind_param("sssss", $name, $email, $password, $photo, $role);
+
+    if ($stmt->execute()) {
+        echo "<script>
+            alert('User berhasil ditambahkan!');
+            window.location='users.php';
+        </script>";
+    } else {
+        echo "<script>
+            alert('Gagal menambahkan user!');
+            history.back();
+        </script>";
+    }
+
+    $stmt->close();
 }
 
-// Ambil data admin untuk dropdown profile
-$admin_id = $_SESSION['user_id'];
-$admin = mysqli_fetch_assoc(mysqli_query($conn, "SELECT * FROM users WHERE id='$admin_id'"));
+/* =========================
+   ADMIN DATA
+========================= */
+$admin_id = (int)$_SESSION['user_id'];
+$admin = mysqli_fetch_assoc(mysqli_query($conn, "SELECT * FROM users WHERE id=$admin_id"));
 $admin_photo = !empty($admin['photo']) ? $admin['photo'] : 'default.png';
+
+if (!$admin) {
+    die("Data admin tidak ditemukan.");
+}
 ?>
 
 <!DOCTYPE html>
@@ -158,17 +257,15 @@ $admin_photo = !empty($admin['photo']) ? $admin['photo'] : 'default.png';
     </style>
 </head>
 <body>
-
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
     <div class="container-fluid px-4">
         <a class="navbar-brand fw-bold" href="dashboard.php">
-            <i class="bi bi-fingerprint fs-3 me-2"></i> Attendance System
-        </a>
+            <i class="bi bi-fingerprint fs-3 me-2"></i> Attendance System</a>
         <div class="d-flex align-items-center">
             <a href="export.php" class="btn btn-outline-light btn-sm me-3">Export Excel</a>
             <div class="dropdown">
                 <a href="#" class="d-flex align-items-center text-decoration-none dropdown-toggle text-white" data-bs-toggle="dropdown">
-                    <img src="../uploads/<?= $admin_photo; ?>" width="42" height="42" class="rounded-circle border border-2 border-white me-2" style="object-fit:cover;">
+                    <img src="../uploads/<?= htmlspecialchars($admin_photo); ?>" width="42" height="42" class="rounded-circle border border-2 border-white me-2" style="object-fit:cover;">
                     <span class="fw-semibold"><?= htmlspecialchars($admin['name']); ?></span>
                 </a>
                 <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-2 py-2">
@@ -198,6 +295,7 @@ $admin_photo = !empty($admin['photo']) ? $admin['photo'] : 'default.png';
                 </div>
                 <div class="card-body-custom">
                     <form method="POST" enctype="multipart/form-data">
+                        <input type="hidden" name="csrf" value="<?= $_SESSION['csrf_token'] ?>">
                         <!-- NAMA -->
                         <div class="mb-4">
                             <label class="form-label"><i class="bi bi-person me-1"></i> Nama Lengkap</label>
@@ -213,14 +311,14 @@ $admin_photo = !empty($admin['photo']) ? $admin['photo'] : 'default.png';
                         <!-- PASSWORD -->
                         <div class="mb-4">
                             <label class="form-label"><i class="bi bi-lock me-1"></i> Password</label>
-                            <input type="text" name="password" class="form-control" placeholder="Masukkan password" required>
-                            <div class="form-text">Password akan tersimpan dalam bentuk teks (sesuai kebutuhan admin).</div>
+                            <input type="password" name="password" class="form-control" placeholder="Masukkan password" required>
+                            <div class="form-text">Password akan disimpan secara aman (encrypted).</div>
                         </div>
 
                         <!-- ROLE -->
                         <div class="mb-4">
                             <label class="form-label"><i class="bi bi-tag me-1"></i> Role / Hak Akses</label>
-                            <select name="role" class="form-select">
+                            <select name="role" class="form-select" required>
                                 <option value="user">User (Regular)</option>
                                 <option value="admin">Admin</option>
                             </select>
@@ -238,7 +336,7 @@ $admin_photo = !empty($admin['photo']) ? $admin['photo'] : 'default.png';
 
                         <!-- BUTTONS -->
                         <div class="d-flex gap-2 mt-4">
-                            <button type="submit" name="save" class="btn btn-primary-custom btn-custom">
+                            <button type="submit" name="save" class="btn btn-success">
                                 <i class="bi bi-save me-1"></i> Simpan User
                             </button>
                             <a href="users.php" class="btn btn-secondary-custom btn-custom">

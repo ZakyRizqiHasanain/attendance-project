@@ -1,28 +1,73 @@
 <?php
+session_start();
+
 include '../auth/admin_check.php';
 include '../config/database.php';
 include '../libs/phpqrcode/qrlib.php';
 
-// URL untuk QR Code (sesuaikan dengan domain/IP Anda)
+/* =========================
+   VALIDASI SESSION
+========================= */
+if (!isset($_SESSION['user_id'])) {
+    die("Unauthorized access.");
+}
+
+/* =========================
+   QR DATA
+========================= */
 $qr_data = "http://10.69.9.215/attendance-project/user/scan_qr.php";
 
-// Folder penyimpanan QR
-$qr_dir = "../assets/qrcode/";
-if (!file_exists($qr_dir)) {
-    mkdir($qr_dir, 0777, true);
+/* =========================
+   QR DIRECTORY (SERVER PATH)
+========================= */
+$qr_dir_server = __DIR__ . "/../assets/qrcode/";
+
+/* =========================
+   QR DIRECTORY (URL PATH) ← FIX UTAMA
+========================= */
+$qr_dir_url = "../assets/qrcode/";
+
+/* =========================
+   CREATE FOLDER IF NOT EXISTS
+========================= */
+if (!is_dir($qr_dir_server)) {
+    mkdir($qr_dir_server, 0755, true);
 }
-$file = $qr_dir . "attendance_qr.png";
 
-// Generate QR code
-QRcode::png($qr_data, $file, QR_ECLEVEL_H, 10);
+/* =========================
+   FILE PATH (SERVER)
+========================= */
+$file_server = $qr_dir_server . "attendance_qr.png";
 
-// Cek apakah file berhasil dibuat
-$qr_exists = file_exists($file);
+/* =========================
+   FILE PATH (URL)
+========================= */
+$file_url = $qr_dir_url . "attendance_qr.png";
 
-// Ambil data admin untuk dropdown profile
-$admin_id = $_SESSION['user_id'];
-$admin = mysqli_fetch_assoc(mysqli_query($conn, "SELECT * FROM users WHERE id='$admin_id'"));
+/* =========================
+   GENERATE QR
+========================= */
+QRcode::png($qr_data, $file_server, QR_ECLEVEL_H, 10);
+
+$qr_exists = file_exists($file_server);
+
+/* =========================
+   ADMIN DATA (SECURE)
+========================= */
+$admin_id = (int) $_SESSION['user_id'];
+
+$stmt = $conn->prepare("SELECT name, email, photo FROM users WHERE id = ?");
+$stmt->bind_param("i", $admin_id);
+$stmt->execute();
+$result = $stmt->get_result();
+$admin_id = (int)$_SESSION['user_id'];
+$admin = mysqli_fetch_assoc(mysqli_query($conn, "SELECT * FROM users WHERE id=$admin_id"));
 $admin_photo = !empty($admin['photo']) ? $admin['photo'] : 'default.png';
+
+if (!$admin) {
+    die("Data admin tidak ditemukan.");
+}
+$stmt->close();
 ?>
 
 <!DOCTYPE html>
@@ -39,31 +84,44 @@ $admin_photo = !empty($admin['photo']) ? $admin['photo'] : 'default.png';
 
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
     <div class="container-fluid px-4">
-        <a class="navbar-brand fw-bold" href="dashboard.php">
-            <i class="bi bi-fingerprint fs-3 me-2"></i> Attendance System
+        <a class="navbar-brand d-flex align-items-center gap-2 fw-bold" href="#">
+            <i class="bi bi-fingerprint text-primary fs-3"></i>
+            <span>Attendance System</span>
         </a>
+
         <div class="d-flex align-items-center">
-            <a href="export.php" class="btn btn-outline-light btn-sm me-3">Export Excel</a>
+            <a href="export.php" class="btn btn-outline-light btn-sm me-3">
+                Export Excel
+            </a>
+
             <div class="dropdown">
                 <a href="#" class="d-flex align-items-center text-decoration-none dropdown-toggle text-white" data-bs-toggle="dropdown">
-                    <img src="../uploads/<?= $admin_photo; ?>" width="42" height="42" class="rounded-circle border border-2 border-white me-2" style="object-fit:cover;">
-                    <span class="fw-semibold"><?= htmlspecialchars($admin['name']); ?></span>
+                    <img src="../uploads/<?= htmlspecialchars($admin_photo); ?>" width="42" height="42" class="rounded-circle border border-2 border-white me-2" style="object-fit:cover;">
+                    <span class="fw-semibold"><?= htmlspecialchars($admin['name'] ?? 'Admin'); ?></span>
                 </a>
-                <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-2 py-2">
+
+                <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-2 py-2" style="border-radius:16px;min-width:250px;">
                     <li class="px-3 py-2 border-bottom">
-                        <div class="fw-bold"><?= htmlspecialchars($admin['name']); ?></div>
-                        <div class="text-muted small"><?= htmlspecialchars($admin['email']); ?></div>
+                        <div class="fw-bold"><?= htmlspecialchars($admin['name'] ?? 'Admin'); ?></div>
+                        <div class="text-muted small"><?= htmlspecialchars($admin['email'] ?? ''); ?></div>
                     </li>
-                    <li><a class="dropdown-item d-flex align-items-center gap-2" href="dashboard.php"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
-                    <li><a class="dropdown-item d-flex align-items-center gap-2" href="users.php"><i class="bi bi-people-fill"></i> Users</a></li>
-                    <li><a class="dropdown-item d-flex align-items-center gap-2" href="attendance_data.php"><i class="bi bi-calendar-check"></i> Attendance</a></li>
-                    <li><a class="dropdown-item d-flex align-items-center gap-2" href="qr_generate.php"><i class="bi bi-qr-code"></i> QR Attendance</a></li>
-                    <li><a class="dropdown-item d-flex align-items-center gap-2" href="settings.php"><i class="bi bi-gear-fill"></i> Settings</a></li>
-                    <li><a class="dropdown-item d-flex align-items-center gap-2" href="leave.php"><i class="bi bi-journal-medical"></i>Pengajuan Izin / Sakit</a></li>
+
+                    <li><a class="dropdown-item" href="dashboard.php"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+                    <li><a class="dropdown-item" href="users.php"><i class="bi bi-people-fill"></i> Users</a></li>
+                    <li><a class="dropdown-item" href="attendance_data.php"><i class="bi bi-calendar-check"></i> Attendance</a></li>
+                    <li><a class="dropdown-item" href="qr_generate.php"><i class="bi bi-qr-code"></i> QR Attendance</a></li>
+                    <li><a class="dropdown-item" href="settings.php"><i class="bi bi-gear-fill"></i> Settings</a></li>
+                    <li><a class="dropdown-item" href="leave.php"><i class="bi bi-journal-medical"></i> Pengajuan Izin / Sakit</a></li>
+
                     <li><hr class="dropdown-divider"></li>
-                    <li><a class="dropdown-item d-flex align-items-center gap-2 text-danger" href="../auth/logout.php" onclick="return confirm('Yakin ingin keluar?');"><i class="bi bi-box-arrow-right"></i> Logout</a></li>
+                    <li>
+                        <a class="dropdown-item text-danger" href="../auth/logout.php" onclick="return confirm('Yakin ingin keluar?');">
+                            <i class="bi bi-box-arrow-right"></i> Logout
+                        </a>
+                    </li>
                 </ul>
             </div>
+
         </div>
     </div>
 </nav>
@@ -80,7 +138,7 @@ $admin_photo = !empty($admin['photo']) ? $admin['photo'] : 'default.png';
                     <!-- QR Code Display -->
                     <?php if ($qr_exists): ?>
                         <div class="qr-wrapper mb-4">
-                            <img src="<?= $file ?>?t=<?= time() ?>" 
+                            <img src="<?= $file_url ?>?t=<?= time() ?>" 
                                  class="img-fluid" 
                                  style="width: 250px; height: auto;"
                                  alt="QR Code Attendance">

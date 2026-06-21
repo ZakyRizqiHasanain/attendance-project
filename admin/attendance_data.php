@@ -1,43 +1,170 @@
 <?php
 session_start();
+
+header("X-Frame-Options: SAMEORIGIN");
+header("X-Content-Type-Options: nosniff");
+header("Referrer-Policy: strict-origin-when-cross-origin");
+header("Permissions-Policy: geolocation=(), camera=(), microphone=()");
+
 include '../auth/admin_check.php';
 include '../config/database.php';
+if (!$conn) {
+    die("Database connection failed");
+}
 
 date_default_timezone_set('Asia/Jakarta');
 
-$admin_id = $_SESSION['user_id'];
+/* =========================
+   ADMIN DATA
+========================= */
+$admin_id = $_SESSION['user_id'] ?? null;
 
-$admin = mysqli_fetch_assoc(mysqli_query($conn, "SELECT * FROM users WHERE id='$admin_id'"));
-$admin_photo = !empty($admin['photo']) ? $admin['photo'] : 'default.png';
-
-// ========== STATISTIK ==========
-$total_attendance = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as total FROM attendance"))['total'];
-$hadir = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as total FROM attendance WHERE status = 'Hadir'"))['total'];
-$terlambat = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as total FROM attendance WHERE status = 'Terlambat'"))['total'];
-$alpha = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as total FROM attendance WHERE status = 'Alpha'"))['total'];
-
-// Data untuk grafik (7 hari terakhir)
-$chart_labels = [];
-$chart_data = [];
-for ($i = 6; $i >= 0; $i--) {
-    $date = date('Y-m-d', strtotime("-$i days"));
-    $count = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as total FROM attendance WHERE DATE(check_in) = '$date'"))['total'];
-    $chart_labels[] = date('d M', strtotime($date));
-    $chart_data[] = $count;
+if (!$admin_id) {
+    header("Location: ../auth/login.php");
+    exit;
 }
 
-// Query data attendance
-$query = mysqli_query($conn, "
-SELECT attendance.*, users.name
-FROM attendance
-JOIN users ON attendance.user_id = users.id
-ORDER BY attendance.id DESC
+$stmt = $conn->prepare("SELECT * FROM users WHERE id=?");
+if (!$stmt) {
+    die("Prepare failed: " . $conn->error);
+}
+$stmt->bind_param("i", $admin_id);
+if (!$stmt->execute()) {
+    die("Query error: " . $stmt->error);
+}
+
+$result = $stmt->get_result();
+if (!$result) {
+    die("Gagal mengambil data admin");
+}
+
+$admin_id = (int)$_SESSION['user_id'];
+$admin = mysqli_fetch_assoc(mysqli_query($conn, "SELECT * FROM users WHERE id=$admin_id"));
+$admin_photo = !empty($admin['photo']) ? $admin['photo'] : 'default.png';
+
+if (!$admin) {
+    die("Data admin tidak ditemukan.");
+}
+$stmt->close();
+
+
+/* =========================
+   STATISTIK
+========================= */
+$statsQuery = mysqli_query($conn,"
+SELECT
+    (SELECT COUNT(*) FROM attendance) AS total,
+
+    (SELECT COUNT(*) FROM attendance 
+    WHERE attendance_date = CURDATE()
+    AND status = 'Hadir') AS hadir,
+
+    (SELECT COUNT(*) FROM attendance 
+    WHERE attendance_date = CURDATE()
+    AND status = 'Terlambat') AS terlambat,
+
+    (SELECT COUNT(*) FROM attendance 
+     WHERE attendance_date = CURDATE()
+     AND status = 'Alpha') AS alpha,
+
+    (SELECT COUNT(*) FROM attendance
+     WHERE attendance_date = CURDATE()
+     AND status = 'Izin') AS izin,
+
+    (SELECT COUNT(*) FROM attendance
+     WHERE attendance_date = CURDATE()
+     AND status = 'Sakit') AS sakit
 ");
 
-// Ambil data admin untuk dropdown profile
-$admin_id = $_SESSION['user_id'];
-$admin = mysqli_fetch_assoc(mysqli_query($conn, "SELECT * FROM users WHERE id='$admin_id'"));
-$admin_photo = !empty($admin['photo']) ? $admin['photo'] : 'default.png';
+$stats = mysqli_fetch_assoc($statsQuery);
+
+if (!$stats) {
+    $stats = [
+        'total' => 0,
+        'hadir' => 0,
+        'terlambat' => 0,
+        'alpha' => 0
+    ];
+}
+
+$total_attendance = $stats['total'] ?? 0;
+$hadir            = $stats['hadir'] ?? 0;
+$terlambat        = $stats['terlambat'] ?? 0;
+$alpha            = $stats['alpha'] ?? 0;
+$izin  = $stats['izin'] ?? 0;
+$sakit = $stats['sakit'] ?? 0;
+
+
+/* =========================
+   CHART DATA (7 HARI)
+========================= */
+$chart_labels = [];
+$chart_data = [];
+
+$dataChart = [];
+
+$queryChart = mysqli_query($conn,"
+SELECT
+DATE(attendance_date) AS tanggal,
+COUNT(*) AS total
+FROM attendance
+WHERE attendance_date >= CURDATE() - INTERVAL 6 DAY
+GROUP BY DATE(attendance_date)
+");
+
+if($queryChart){
+    while($row = mysqli_fetch_assoc($queryChart)){
+        $dataChart[$row['tanggal']] = $row['total'];
+    }
+}
+
+for($i=6;$i>=0;$i--)
+{
+    $date = date('Y-m-d', strtotime("-$i days"));
+
+    $chart_labels[] = date('d M', strtotime($date));
+
+    $chart_data[] = $dataChart[$date] ?? 0;
+}
+
+if (empty($chart_labels)) {
+    $chart_labels = array_fill(0, 7, '-');
+    $chart_data   = array_fill(0, 7, 0);
+}
+
+
+/* =========================
+   ATTENDANCE DATA
+========================= */
+$stmt = $conn->prepare("
+    SELECT
+        a.id,
+        a.attendance_date,
+        a.check_in,
+        a.check_out,
+        a.status,
+        u.name
+    FROM attendance a
+    INNER JOIN users u ON a.user_id = u.id
+    ORDER BY a.attendance_date DESC, a.id DESC
+    LIMIT 200
+");
+
+if (!$stmt) {
+    die("Prepare failed: " . $conn->error);
+}
+
+if (!$stmt->execute()) {
+    die("Query error: " . $stmt->error);
+}
+
+$result = $stmt->get_result();
+
+if (!$result) {
+    die("Gagal mengambil data attendance");
+}
+
+$query = $result;
 ?>
 
 <!DOCTYPE html>
@@ -59,43 +186,47 @@ $admin_photo = !empty($admin['photo']) ? $admin['photo'] : 'default.png';
 
 <!-- NAVBAR -->
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-<div class="container-fluid px-4">
-
-    <a class="navbar-brand d-flex align-items-center gap-2 fw-bold" href="#">
-        <i class="bi bi-fingerprint text-primary fs-3"></i>
-        <span>Attendance System</span>
-    </a>
-
-    <div class="d-flex align-items-center">
-
-        <a href="export.php" class="btn btn-outline-light btn-sm me-3">
-            Export Excel
+    <div class="container-fluid px-4">
+        <a class="navbar-brand d-flex align-items-center gap-2 fw-bold" href="#">
+            <i class="bi bi-fingerprint text-primary fs-3"></i>
+            <span>Attendance System</span>
         </a>
 
-        <!-- PROFILE DROPDOWN -->
+        <div class="d-flex align-items-center">
+            <a href="export.php" class="btn btn-outline-light btn-sm me-3">
+                Export Excel
+            </a>
+
             <div class="dropdown">
-                <a href="#" class="d-flex align-items-center text-decoration-none dropdown-toggle text-white" id="adminDropdown" data-bs-toggle="dropdown">
-                    <img src="../uploads/<?= $admin_photo; ?>" width="42" height="42" class="rounded-circle border border-2 border-white me-2" style="object-fit:cover;">
-                    <span class="fw-semibold"><?= htmlspecialchars($admin['name']); ?></span>
+                <a href="#" class="d-flex align-items-center text-decoration-none dropdown-toggle text-white" data-bs-toggle="dropdown">
+                    <img src="../uploads/<?= htmlspecialchars($admin_photo); ?>" width="42" height="42" class="rounded-circle border border-2 border-white me-2" style="object-fit:cover;">
+                    <span class="fw-semibold"><?= htmlspecialchars($admin['name'] ?? 'Admin'); ?></span>
                 </a>
+
                 <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-2 py-2" style="border-radius:16px;min-width:250px;">
                     <li class="px-3 py-2 border-bottom">
-                        <div class="fw-bold"><?= htmlspecialchars($admin['name']); ?></div>
-                        <div class="text-muted small"><?= htmlspecialchars($admin['email']); ?></div>
+                        <div class="fw-bold"><?= htmlspecialchars($admin['name'] ?? 'Admin'); ?></div>
+                        <div class="text-muted small"><?= htmlspecialchars($admin['email'] ?? ''); ?></div>
                     </li>
-                    <li><a class="dropdown-item d-flex align-items-center gap-2" href="dashboard.php"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
-                    <li><a class="dropdown-item d-flex align-items-center gap-2" href="users.php"><i class="bi bi-people-fill"></i> Users</a></li>
-                    <li><a class="dropdown-item d-flex align-items-center gap-2" href="attendance_data.php"><i class="bi bi-calendar-check"></i> Attendance</a></li>
-                    <li><a class="dropdown-item d-flex align-items-center gap-2" href="qr_generate.php"><i class="bi bi-qr-code"></i> QR Attendance</a></li>
-                    <li><a class="dropdown-item d-flex align-items-center gap-2" href="settings.php"><i class="bi bi-gear-fill"></i> Settings</a></li>
-                    <li><a class="dropdown-item d-flex align-items-center gap-2" href="leave.php"><i class="bi bi-journal-medical"></i>Pengajuan Izin / Sakit</a></li>
+
+                    <li><a class="dropdown-item" href="dashboard.php"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+                    <li><a class="dropdown-item" href="users.php"><i class="bi bi-people-fill"></i> Users</a></li>
+                    <li><a class="dropdown-item" href="attendance_data.php"><i class="bi bi-calendar-check"></i> Attendance</a></li>
+                    <li><a class="dropdown-item" href="qr_generate.php"><i class="bi bi-qr-code"></i> QR Attendance</a></li>
+                    <li><a class="dropdown-item" href="settings.php"><i class="bi bi-gear-fill"></i> Settings</a></li>
+                    <li><a class="dropdown-item" href="leave.php"><i class="bi bi-journal-medical"></i> Pengajuan Izin / Sakit</a></li>
+
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <a class="dropdown-item text-danger" href="../auth/logout.php" onclick="return confirm('Yakin ingin keluar?');">
+                            <i class="bi bi-box-arrow-right"></i> Logout
+                        </a>
+                    </li>
                 </ul>
-    
             </div>
 
+        </div>
     </div>
-
-</div>
 </nav>
 
 <!-- CONTENT -->
@@ -108,52 +239,82 @@ $admin_photo = !empty($admin['photo']) ? $admin['photo'] : 'default.png';
         </h2>
     </div>
 
-    <!-- STATS -->
+    <!-- STATISTIK -->
     <div class="row g-4 mb-5">
 
-        <div class="col-md-3">
+        <div class="col-md-4">
             <div class="card card-stats">
                 <div class="card-body d-flex align-items-center">
                     <div class="icon-bg me-3"><i class="bi bi-database"></i></div>
                     <div>
-                        <h6 class="text-muted">Total</h6>
-                        <h3><?= $total_attendance ?></h3>
+                        <h6 class="text-muted mb-1">Total Records</h6>
+                        <h3 class="mb-0"><?= (int)$total_attendance ?></h3>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="col-md-3">
+        <div class="col-md-4">
             <div class="card card-stats">
                 <div class="card-body d-flex align-items-center">
-                    <div class="icon-bg text-success me-3"><i class="bi bi-check-circle"></i></div>
+                    <div class="icon-bg me-3"><i class="bi bi-check-circle"></i></div>
                     <div>
-                        <h6 class="text-muted">Hadir</h6>
-                        <h3><?= $hadir ?></h3>
+                        <h6 class="text-muted mb-1">Hadir</h6>
+                        <h3 class="mb-0"><?= (int)$hadir ?></h3>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="col-md-3">
+        <div class="col-md-4">
             <div class="card card-stats">
                 <div class="card-body d-flex align-items-center">
-                    <div class="icon-bg text-warning me-3"><i class="bi bi-clock"></i></div>
+                    <div class="icon-bg me-3"><i class="bi bi-clock"></i></div>
                     <div>
-                        <h6 class="text-muted">Terlambat</h6>
-                        <h3><?= $terlambat ?></h3>
+                        <h6 class="text-muted mb-1">Terlambat</h6>
+                        <h3 class="mb-0"><?= (int)$terlambat ?></h3>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="col-md-3">
+        <div class="col-md-4">
             <div class="card card-stats">
                 <div class="card-body d-flex align-items-center">
-                    <div class="icon-bg text-danger me-3"><i class="bi bi-x-circle"></i></div>
+                    <div class="icon-bg me-3">
+                        <i class="bi bi-person-x"></i>
+                    </div>
                     <div>
-                        <h6 class="text-muted">Alpha</h6>
-                        <h3><?= $alpha ?></h3>
+                        <h6 class="text-muted mb-1">Alpha</h6>
+                        <h3 class="mb-0"><?= (int)$alpha ?></h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card card-stats">
+                <div class="card-body d-flex align-items-center">
+                    <div class="icon-bg me-3">
+                        <i class="bi bi-journal-check"></i>
+                    </div>
+                    <div>
+                        <h6 class="text-muted mb-1">Izin</h6>
+                        <h3 class="mb-0"><?= (int)$izin ?></h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card card-stats">
+                <div class="card-body d-flex align-items-center">
+                    <div class="icon-bg me-3">
+                        <i class="bi bi-heart-pulse"></i>
+                    </div>
+                    <div>
+                        <h6 class="text-muted mb-1">Sakit</h6>
+                        <h3 class="mb-0"><?= (int)$sakit ?></h3>
                     </div>
                 </div>
             </div>
@@ -161,17 +322,21 @@ $admin_photo = !empty($admin['photo']) ? $admin['photo'] : 'default.png';
 
     </div>
 
+    <!-- CHART (TARUH DI SINI) -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <canvas id="attendanceChart" style="max-height:300px;"></canvas>
+        </div>
+    </div>
+
     <!-- TABLE -->
     <div class="table-container">
-
         <h5 class="mb-3">
             <i class="bi bi-table me-2"></i> Detail Attendance
         </h5>
 
         <div class="table-responsive">
-
             <table id="table" class="table table-hover align-middle">
-
                 <thead class="table-light">
                     <tr>
                         <th>No</th>
@@ -184,57 +349,80 @@ $admin_photo = !empty($admin['photo']) ? $admin['photo'] : 'default.png';
                 </thead>
 
                 <tbody>
-
-                <?php $no=1; while($row = mysqli_fetch_assoc($query)) { ?>
+                <?php $no = 1; while($row = mysqli_fetch_assoc($query)) { ?>
+                    <?php
+                        $status = $row['status'] ?? 'Unknown';
+                        $badge = match($status) {
+                            'Hadir' => 'bg-success',
+                            'Terlambat' => 'bg-warning text-dark',
+                            'Alpha' => 'bg-danger',
+                            'Izin'       => 'bg-primary',
+                            'Sakit'      => 'bg-info',
+                            default => 'bg-secondary'
+                        };
+                        $checkOut = $row['check_out'] ?? '-';
+                    ?>
 
                     <tr>
                         <td><?= $no++; ?></td>
-                        <td class="fw-semibold"><?= htmlspecialchars($row['name']); ?></td>
-                        <td><?= date('d M Y', strtotime($row['attendance_date'])) ?></td>
-                        <td><?= $row['check_in'] ?></td>
-                        <td><?= $row['check_out'] ?: '-' ?></td>
+                        <td><?= htmlspecialchars($row['name'] ?? '-', ENT_QUOTES, 'UTF-8') ?></td>
+                        <td data-order="<?= htmlspecialchars($row['attendance_date'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                            <?= !empty($row['attendance_date'])
+                                ? date('d M Y', strtotime($row['attendance_date']))
+                                : '-'; ?>
+                        </td>
+                        <td><?= htmlspecialchars($row['check_in'] ?? '-', ENT_QUOTES, 'UTF-8') ?></td>
+                        <td><?= htmlspecialchars($checkOut, ENT_QUOTES, 'UTF-8'); ?></td>
                         <td>
-                            <span class="badge bg-success">
-                                <?= $row['status'] ?>
+                            <span class="badge <?= htmlspecialchars($badge, ENT_QUOTES, 'UTF-8'); ?>">
+                                <?= $status === 'Alpha' ? 'Tidak Hadir' : $status ?>
                             </span>
                         </td>
                     </tr>
 
                 <?php } ?>
-
                 </tbody>
-
             </table>
-
-        </div>
-
-    </div>
-
-</div>
-
-<script>
-$(document).ready(function(){
-    $('#table').DataTable({
-        pageLength: 10
-    });
-});
-</script>
-
         </div>
     </div>
-</nav>
+
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
 <script>
-    new Chart(document.getElementById('attendanceChart'), {
-        type: 'bar',
-        data: { labels: <?= json_encode($chart_labels) ?>, datasets: [{ label: 'Jumlah Kehadiran', data: <?= json_encode($chart_data) ?>, backgroundColor: '#2c6e2f', borderRadius: 10, borderSkipped: false }] },
-        options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { position: 'top' } } }
+$(document).ready(function () {
+    $('#table').DataTable({
+        pageLength: 10,
+        order: [[2, 'desc']]
     });
-    $(document).ready(function() { $('#attendanceTable').DataTable({ order: [[0,'desc']], pageLength: 10, language: { url: '//cdn.datatables.net/plug-ins/1.13.4/i18n/id.json' }, columnDefs: [{ orderable: false, targets: [5,6] }] }); });
+});
+
+/* CHART */
+new Chart(document.getElementById('attendanceChart'), {
+    type: 'bar',
+    data: {
+        labels: <?= json_encode($chart_labels ?: ['-','-','-','-','-','-','-']) ?>,
+        datasets: [{
+            label: 'Jumlah Kehadiran',
+            data: <?= json_encode($chart_data ?: [0,0,0,0,0,0,0]) ?>,
+            backgroundColor: '#2c6e2f',
+            borderRadius: 10
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                display: true,
+                position: 'top'
+            }
+        }
+    }
+});
 </script>
 </body>
 </html>

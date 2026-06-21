@@ -14,11 +14,12 @@ date_default_timezone_set('Asia/Jakarta');
 /* =========================
    AMBIL DATA USER
 ========================= */
-$user_query = mysqli_query($conn, "SELECT * FROM users WHERE id='$user_id'");
-$user_data = mysqli_fetch_assoc($user_query);
-
+$stmt = $conn->prepare("SELECT * FROM users WHERE id = ?");
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$user_data = $stmt->get_result()->fetch_assoc();
+$stmt->close();
 $user_photo = !empty($user_data['photo']) ? $user_data['photo'] : 'default.png';
-
 $today = date('Y-m-d');
 
 /*
@@ -26,11 +27,15 @@ $today = date('Y-m-d');
 | DATA ATTENDANCE
 |----------------------------------------------------------------
 */
-$query = mysqli_query($conn, "
-SELECT * FROM attendance
-WHERE user_id='$user_id'
-ORDER BY id DESC
+$stmt = $conn->prepare("
+    SELECT *
+    FROM attendance
+    WHERE user_id = ?
+    ORDER BY attendance_date DESC, id DESC
 ");
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$query = $stmt->get_result();
 ?>
 
 <!DOCTYPE html>
@@ -76,13 +81,13 @@ ORDER BY id DESC
                 <a href="#" class="d-flex align-items-center text-decoration-none dropdown-toggle text-white"
                    data-bs-toggle="dropdown">
 
-                    <img src="../uploads/<?= $user_photo; ?>"
+                    <img src="../uploads/<?= htmlspecialchars($user_photo); ?>"
                          width="40"
                          height="40"
                          class="rounded-circle border border-2 border-white me-2"
                          style="object-fit: cover;">
 
-                    <span class="fw-semibold"><?= $_SESSION['name']; ?></span>
+                    <span class="fw-semibold"><?= htmlspecialchars($_SESSION['name']); ?></span>
 
                 </a>
 
@@ -92,9 +97,9 @@ ORDER BY id DESC
 
                     <!-- PROFILE HEADER -->
                     <li class="px-3 py-2 border-bottom">
-                        <div class="fw-bold text-dark"><?= $_SESSION['name']; ?></div>
+                        <div class="fw-bold text-dark"><?= htmlspecialchars($_SESSION['name']); ?></div>
                         <div class="text-muted small text-truncate">
-                            <?= $user_data['email']; ?>
+                            <?= htmlspecialchars($user_data['email']); ?>
                         </div>
                     </li>
 
@@ -130,7 +135,7 @@ ORDER BY id DESC
         </h3>
 
         <span class="badge bg-secondary px-3 py-2">
-            Total: <?= mysqli_num_rows($query); ?>
+            Total: <?= $query->num_rows; ?>
         </span>
     </div>
 
@@ -154,76 +159,81 @@ ORDER BY id DESC
                 </thead>
 
                 <tbody>
+                    <?php
+                    $no = 1;
+                    if ($query->num_rows > 0):
+                    ?>
+                        <?php while ($data = $query->fetch_assoc()): ?>
+                        <tr>
+                            <td><?= $no++; ?></td>
+                            <td>
+                                <?= date('d F Y', strtotime($data['attendance_date'])); ?>
+                            </td>
+                            <td>
+                                <?= !empty($data['check_in'])
+                                    ? date('H:i:s', strtotime($data['check_in']))
+                                    : '-'; ?>
+                            </td>
+                            <td>
+                                <?= !empty($data['check_out'])
+                                    ? date('H:i:s', strtotime($data['check_out']))
+                                    : '-'; ?>
+                            </td>
 
-                <?php $no=1; while($data=mysqli_fetch_assoc($query)) { ?>
+                            <td>
+                                <?php if ($data['status'] == 'Hadir'): ?>
+                                    <span class="badge bg-success">Hadir</span>
+                                <?php elseif ($data['status'] == 'Terlambat'): ?>
+                                    <span class="badge bg-warning text-dark">Terlambat</span>
+                                <?php elseif ($data['status'] == 'Izin'): ?>
+                                    <span class="badge bg-primary">Izin</span>
+                                <?php elseif ($data['status'] == 'Sakit'): ?>
+                                    <span class="badge bg-info text-dark">Sakit</span>
+                                <?php elseif ($data['status'] == 'Alpha'): ?>
+                                    <span class="badge bg-danger">Tidak Hadir</span>
+                                <?php else: ?>
+                                    <span class="badge bg-secondary">-</span>
+                                <?php endif; ?>
+                            </td>
 
-                    <tr>
+                            <td>
+                                <?php if (!empty($data['latitude']) && !empty($data['longitude'])): ?>
+                                    <a href="https://www.google.com/maps?q=<?= $data['latitude']; ?>,<?= $data['longitude']; ?>"
+                                    target="_blank"
+                                    class="btn btn-sm btn-outline-info">
+                                        <i class="bi bi-map"></i>
+                                    </a>
+                                <?php else: ?>
+                                    -
+                                <?php endif; ?>
+                            </td>
 
-                        <td><?= $no++; ?></td>
+                            <td>
+                                <?php if (!empty($data['selfie'])): ?>
+                                    <img src="../uploads/<?= htmlspecialchars($data['selfie']); ?>"
+                                        class="img-thumb">
+                                <?php else: ?>
+                                    -
+                                <?php endif; ?>
+                            </td>
 
-                        <!-- TANGGAL -->
-                        <td>
-                            <?= date('d F Y', strtotime($data['attendance_date'])); ?>
-                        </td>
-
-                        <!-- JAM MASUK -->
-                        <td>
-                            <?= $data['check_in'] ? date('H:i:s', strtotime($data['check_in'])) : '-'; ?>
-                        </td>
-
-                        <!-- JAM PULANG -->
-                        <td>
-                            <?= $data['check_out'] ? date('H:i:s', strtotime($data['check_out'])) : '-'; ?>
-                        </td>
-
-                        <!-- STATUS -->
-                        <td>
-                            <?php if($data['status']=='Hadir') { ?>
-                                <span class="badge bg-success">Hadir</span>
-
-                            <?php } elseif($data['status']=='Terlambat') { ?>
-                                <span class="badge bg-warning text-dark">Terlambat</span>
-
-                            <?php } elseif($data['status']=='Izin') { ?>
-                                <span class="badge bg-primary">Izin</span>
-
-                            <?php } elseif($data['status']=='Sakit') { ?>
-                                <span class="badge bg-info text-dark">Sakit</span>
-
-                            <?php } else { ?>
-                                <span class="badge bg-danger">Tidak Hadir</span>
-                            <?php } ?>
-                        </td>
-
-                        <!-- LOKASI -->
-                        <td>
-                            <?php if($data['latitude'] && $data['longitude']) { ?>
-                                <a href="https://www.google.com/maps?q=<?= $data['latitude']; ?>,<?= $data['longitude']; ?>"
-                                   target="_blank"
-                                   class="btn btn-sm btn-outline-info">
-                                    <i class="bi bi-map"></i>
-                                </a>
-                            <?php } else { echo "-"; } ?>
-                        </td>
-
-                        <!-- SELFIE MASUK -->
-                        <td>
-                            <?php if($data['selfie']) { ?>
-                                <img src="../uploads/<?= $data['selfie']; ?>" class="img-thumb">
-                            <?php } else { echo "-"; } ?>
-                        </td>
-
-                        <!-- SELFIE PULANG -->
-                        <td>
-                            <?php if($data['selfie_checkout']) { ?>
-                                <img src="../uploads/<?= $data['selfie_checkout']; ?>" class="img-thumb">
-                            <?php } else { echo "-"; } ?>
-                        </td>
-
-                    </tr>
-
-                <?php } ?>
-
+                            <td>
+                                <?php if (!empty($data['selfie_checkout'])): ?>
+                                    <img src="../uploads/<?= htmlspecialchars($data['selfie_checkout']); ?>"
+                                        class="img-thumb">
+                                <?php else: ?>
+                                    -
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                        <?php endwhile; ?>
+                    <?php else: ?>
+                        <tr>
+                            <td colspan="8" class="text-center">
+                                Belum ada data absensi
+                            </td>
+                        </tr>
+                    <?php endif; ?>
                 </tbody>
 
             </table>
@@ -234,6 +244,9 @@ ORDER BY id DESC
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-
+<?php
+$query->free();
+$conn->close();
+?>
 </body>
 </html>
